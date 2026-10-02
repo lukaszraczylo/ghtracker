@@ -45,7 +45,7 @@ func testView() collector.View {
 	}
 	bare := model.Repo{FullName: "o/bare", URL: "https://github.com/o/bare", ReleasesURL: "https://github.com/o/bare/releases", Err: "boom"}
 	return collector.View{
-		Now: now, LastRefresh: now.Add(-time.Hour), Interval: 6 * time.Hour, Loaded: true, Crit: 1, Warn: 1,
+		Now: now, LastRefresh: now.Add(-time.Hour), Interval: 6 * time.Hour, Loaded: true, Crit: 1, Warn: 1, ScanDone: 5, ScanTotal: 9,
 		Thresholds: config.Thresholds{PRWarnAfter: 48 * time.Hour, PRCritAfter: 168 * time.Hour, IssueStaleAfter: 720 * time.Hour},
 		Repos:      []model.Repo{repo, bare},
 		Alerts: []model.Alert{
@@ -125,6 +125,7 @@ func TestStateJSONContract(t *testing.T) {
 		Repos           []map[string]any
 		Alerts          []map[string]any
 		Counts          struct{ Crit, Warn int }
+		Scan            struct{ Done, Total int }
 		Thresholds      struct{ PRWarnSeconds, PRCritSeconds int64 }
 		IntervalSeconds int64
 		Loaded          bool
@@ -132,6 +133,9 @@ func TestStateJSONContract(t *testing.T) {
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
+	}
+	if got.Scan.Done != 5 || got.Scan.Total != 9 {
+		t.Fatalf("scan: %+v", got.Scan)
 	}
 	if got.IntervalSeconds != 21600 || !got.Loaded || !got.ManualRefresh || got.Counts.Crit != 1 || got.Counts.Warn != 1 {
 		t.Fatalf("top level: %+v", got)

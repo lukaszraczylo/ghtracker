@@ -49,6 +49,7 @@ export function state(over: Partial<TrackerState> = {}): TrackerState {
     loaded: true,
     refreshing: false,
     manualRefresh: false,
+    scan: { done: 0, total: 0 },
     counts: { crit: 0, warn: 0 },
     thresholds: {
       prWarnSeconds: 172800,

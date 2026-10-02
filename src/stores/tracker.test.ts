@@ -134,6 +134,15 @@ describe('tracker store', () => {
     expect(store.owners).toEqual(['o'])
   })
 
+  it('counts rows by severity so the headline matches the lists', async () => {
+    mockFetch(() => json(mixedState()))
+    const store = useTrackerStore()
+    await store.load()
+    // three alerts, but the two on the same pull request merge into one row
+    expect(store.rowCounts).toEqual({ crit: 2, warn: 0 })
+    expect(store.facets.severity.all).toBe(store.rowCounts.crit + store.rowCounts.warn)
+  })
+
   it('searches projects by name and clears every filter at once', async () => {
     mockFetch(() => json(mixedState()))
     const store = useTrackerStore()

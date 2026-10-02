@@ -68,9 +68,10 @@ describe('App', () => {
   })
 
   it('waits while the server has not finished its first refresh', async () => {
-    const w = mountWith(state({ loaded: false }))
+    const w = mountWith(state({ loaded: false, scan: { done: 4, total: 10 } }))
     await flushPromises()
     expect(w.find('[data-test=waiting]').exists()).toBe(true)
+    expect(w.get('[data-test=loading-detail]').text()).toContain('4 of 10 scanned')
     expect(w.find('[data-test=headline]').exists()).toBe(false)
   })
 

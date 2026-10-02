@@ -1,11 +1,62 @@
 <script setup lang="ts">
 import { faCodePullRequest, faCircleDot, faGears } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ageSince, isZeroTime } from '@/lib/format'
 import type { Repo } from '@/lib/types'
 
-defineProps<{ repos: Repo[]; total: number; focused: string | null; nowMs: number }>()
+const props = defineProps<{ repos: Repo[]; total: number; focused: string | null; nowMs: number }>()
 defineEmits<{ select: [fullName: string] }>()
+
+/** Rows rendered at first and added each time the list is scrolled near its end. */
+const PAGE_SIZE = 20
+
+const shown = ref(PAGE_SIZE)
+const visible = computed(() => props.repos.slice(0, shown.value))
+const hasMore = computed(() => shown.value < props.repos.length)
+
+const scroller = ref<HTMLElement | null>(null)
+const sentinel = ref<HTMLElement | null>(null)
+let observer: IntersectionObserver | null = null
+
+function loadMore(): void {
+  if (hasMore.value) shown.value += PAGE_SIZE
+}
+
+// A new search or filter starts the list over from the top.
+watch(
+  () => props.repos,
+  () => {
+    shown.value = PAGE_SIZE
+    if (scroller.value) scroller.value.scrollTop = 0
+  },
+)
+
+// Observe the end marker; a fresh marker element is rendered while more rows remain.
+watch(
+  sentinel,
+  (el, prev) => {
+    if (prev) observer?.unobserve(prev)
+    if (el) observer?.observe(el)
+  },
+  { flush: 'post' },
+)
+
+onMounted(async () => {
+  await nextTick()
+  if (typeof IntersectionObserver === 'undefined') {
+    shown.value = props.repos.length
+    return
+  }
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((e) => e.isIntersecting)) loadMore()
+    },
+    { root: scroller.value, rootMargin: '200px' },
+  )
+  if (sentinel.value) observer.observe(sentinel.value)
+})
+onBeforeUnmount(() => observer?.disconnect())
 
 const DOT = { crit: 'bg-crit', warn: 'bg-warn', ok: 'bg-ok' } as const
 const LABEL = { crit: 'Critical', warn: 'Warning', ok: 'Healthy' } as const
@@ -28,10 +79,11 @@ const LABEL = { crit: 'Critical', warn: 'Warning', ok: 'Healthy' } as const
     </p>
     <ul
       v-else
-      class="border-border bg-surface divide-border max-h-[70vh] divide-y overflow-y-auto rounded-lg border lg:max-h-[calc(100vh-7rem)]"
+      ref="scroller"
+      class="border-border bg-surface divide-border max-h-[70vh] divide-y overflow-y-auto rounded-lg border [scrollbar-color:var(--border)_transparent] [scrollbar-width:thin] lg:max-h-[calc(100vh-7rem)]"
     >
       <li
-        v-for="repo in repos"
+        v-for="repo in visible"
         :key="repo.fullName"
         class="px-3 py-2.5"
         :class="focused === repo.fullName ? 'bg-accent' : ''"
@@ -88,6 +140,14 @@ const LABEL = { crit: 'Critical', warn: 'Warning', ok: 'Healthy' } as const
             released {{ ageSince(repo.release.publishedAt, nowMs) }} ago
           </span>
         </div>
+      </li>
+      <li
+        v-if="hasMore"
+        ref="sentinel"
+        class="text-muted-foreground px-3 py-3 text-center text-xs"
+        data-test="more"
+      >
+        Showing {{ visible.length }} of {{ repos.length }}
       </li>
     </ul>
   </section>

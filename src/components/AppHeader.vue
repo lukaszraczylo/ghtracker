@@ -11,6 +11,7 @@ const props = defineProps<{
   intervalSeconds: number
   loaded: boolean
   scanning: boolean
+  progress: string
   manualRefresh: boolean
 }>()
 defineEmits<{ rescan: [] }>()
@@ -56,8 +57,10 @@ const nextIn = computed(() => {
         @click="$emit('rescan')"
       >
         <FontAwesomeIcon :icon="faArrowsRotate" :spin="scanning" aria-hidden="true" />
-        <span class="hidden sm:inline">{{ scanning ? 'Rescanning…' : 'Rescan repositories' }}</span>
-        <span class="sm:hidden">{{ scanning ? 'Scanning…' : 'Rescan' }}</span>
+        <span class="hidden sm:inline">{{
+          scanning ? `Scanning ${progress}`.trim() : 'Rescan repositories'
+        }}</span>
+        <span class="sm:hidden">{{ scanning ? progress || 'Scanning…' : 'Rescan' }}</span>
       </Button>
     </div>
   </header>

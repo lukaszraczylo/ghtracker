@@ -33,6 +33,9 @@ type View struct {
 	Warn        int
 	Loaded      bool
 	Refreshing  bool
+	// ScanDone and ScanTotal count the repos of the running (or last) scan.
+	ScanDone  int
+	ScanTotal int
 }
 
 // Stats are monotonic counters and timings of the refresh loop.
@@ -56,6 +59,8 @@ type Collector struct {
 	th          config.Thresholds
 	interval    time.Duration
 	refreshes   atomic.Uint64
+	scanDone    atomic.Int64
+	scanTotal   atomic.Int64
 	repoErrs    atomic.Uint64
 	lastDur     time.Duration
 	concurrency int
@@ -118,6 +123,8 @@ func (c *Collector) Refresh(ctx context.Context) {
 
 	start := c.now()
 	c.limited.Store(false)
+	c.scanDone.Store(0)
+	c.scanTotal.Store(int64(len(c.names)))
 	results := make([]model.Repo, len(c.names))
 	sem := make(chan struct{}, c.concurrency)
 	var wg sync.WaitGroup
@@ -128,6 +135,7 @@ func (c *Collector) Refresh(ctx context.Context) {
 			defer wg.Done()
 			defer func() { <-sem }()
 			results[i] = c.refreshOne(ctx, name, start)
+			c.scanDone.Add(1)
 		}()
 	}
 	wg.Wait()
@@ -193,6 +201,7 @@ func (c *Collector) View() View {
 	v := View{
 		Now: now, LastRefresh: c.lastRefresh, Interval: c.interval, Thresholds: c.th,
 		Loaded: c.loaded, Refreshing: c.refreshing.Load(),
+		ScanDone: int(c.scanDone.Load()), ScanTotal: int(c.scanTotal.Load()),
 	}
 	v.Repos = make([]model.Repo, 0, len(c.names))
 	for _, n := range c.names {

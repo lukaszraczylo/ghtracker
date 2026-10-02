@@ -312,3 +312,28 @@ func TestSummarizeWarningsMergesSharedReason(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestScanProgressAdvancesAsReposFinish(t *testing.T) {
+	release := make(chan struct{})
+	started := make(chan struct{}, 4)
+	f := &fakeFetcher{fn: func(name string) (model.Repo, error) {
+		started <- struct{}{}
+		<-release
+		return model.Repo{FullName: name}, nil
+	}}
+	c := newCollector(f, "o/a", "o/b", "o/c")
+	if v := c.View(); v.ScanDone != 0 || v.ScanTotal != 0 {
+		t.Fatalf("before any scan: %+v", v)
+	}
+	done := make(chan struct{})
+	go func() { c.Refresh(context.Background()); close(done) }()
+	<-started
+	if v := c.View(); v.ScanTotal != 3 || v.ScanDone != 0 || !v.Refreshing {
+		t.Fatalf("during scan: done=%d total=%d refreshing=%v", v.ScanDone, v.ScanTotal, v.Refreshing)
+	}
+	close(release)
+	<-done
+	if v := c.View(); v.ScanDone != 3 || v.ScanTotal != 3 {
+		t.Fatalf("after scan: done=%d total=%d", v.ScanDone, v.ScanTotal)
+	}
+}

@@ -49,6 +49,7 @@ export interface TrackerState {
   loaded: boolean
   refreshing: boolean
   manualRefresh: boolean
+  scan: { done: number; total: number }
   counts: { crit: number; warn: number }
   thresholds: Thresholds
   repos: Repo[]

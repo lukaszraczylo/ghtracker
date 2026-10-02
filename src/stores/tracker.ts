@@ -122,6 +122,12 @@ export const useTrackerStore = defineStore('tracker', () => {
     )
   })
   const activeFilters = computed(() => activeFilterCount(filters.value))
+  /** Rows by severity, so the headline matches the lists below it (alerts on one item merge into one row). */
+  const rowCounts = computed(() => {
+    const out = { crit: 0, warn: 0 }
+    for (const b of blocks.value) for (const r of b.rows) out[r.severity] += 1
+    return out
+  })
   const repoCounts = computed(() => (state.value ? countByRepo(state.value) : new Map()))
   const facts = computed(() => (state.value ? computeFacts(state.value) : null))
 
@@ -189,6 +195,7 @@ export const useTrackerStore = defineStore('tracker', () => {
     activeFilters,
     visibleBlocks,
     repoCounts,
+    rowCounts,
     facts,
     toggleRepo,
     clearFilters,

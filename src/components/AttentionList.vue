@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { faCircleCheck } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import FilterBar from '@/components/FilterBar.vue'
 import RepoGroup from '@/components/RepoGroup.vue'
+import { useColumns } from '@/composables/useColumns'
+import { balanceColumns } from '@/lib/layout'
 import type { Facets, Filters } from '@/lib/filters'
 import type { Block } from '@/lib/types'
 
-defineProps<{
+const props = defineProps<{
   blocks: Block[]
   nowMs: number
   critSeconds: number
@@ -17,6 +19,12 @@ defineProps<{
 }>()
 const filters = defineModel<Filters>('filters', { required: true })
 defineEmits<{ clear: [] }>()
+
+const columnCount = useColumns()
+// A group's height is its header plus its rows, so rows+2 approximates it.
+const columns = computed(() =>
+  balanceColumns(props.blocks, columnCount.value, (b) => b.rows.length + 2),
+)
 
 const bar = ref<InstanceType<typeof FilterBar> | null>(null)
 defineExpose({ focusSearch: () => bar.value?.focus() })
@@ -43,14 +51,16 @@ defineExpose({ focusSearch: () => bar.value?.focus() })
       <FontAwesomeIcon :icon="faCircleCheck" class="text-ok text-xl" aria-hidden="true" />
       Nothing matches the current filters.
     </div>
-    <div v-else class="grid grid-cols-[minmax(0,1fr)] items-start gap-4 2xl:grid-cols-2">
-      <RepoGroup
-        v-for="block in blocks"
-        :key="block.repo.fullName"
-        :block="block"
-        :now-ms="nowMs"
-        :crit-seconds="critSeconds"
-      />
+    <div v-else class="flex items-start gap-4" data-test="columns">
+      <div v-for="(column, i) in columns" :key="i" class="flex min-w-0 flex-1 flex-col gap-4">
+        <RepoGroup
+          v-for="block in column"
+          :key="block.repo.fullName"
+          :block="block"
+          :now-ms="nowMs"
+          :crit-seconds="critSeconds"
+        />
+      </div>
     </div>
   </section>
 </template>

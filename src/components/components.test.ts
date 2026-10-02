@@ -1,9 +1,10 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import AgeMeter from './AgeMeter.vue'
 import AppHeader from './AppHeader.vue'
 import AttentionList from './AttentionList.vue'
 import FilterBar from './FilterBar.vue'
+import LoadingScreen from './LoadingScreen.vue'
 import AttentionRow from './AttentionRow.vue'
 import FleetOverview from './FleetOverview.vue'
 import ProjectList from './ProjectList.vue'
@@ -24,6 +25,7 @@ describe('AppHeader', () => {
     intervalSeconds: 21600,
     loaded: true,
     scanning: false,
+    progress: '',
   }
 
   it('shows when data was fetched and when the next refresh is due', () => {
@@ -44,7 +46,11 @@ describe('AppHeader', () => {
     expect(w.emitted('rescan')).toHaveLength(1)
     const busy = mount(AppHeader, { props: { ...base, manualRefresh: true, scanning: true } })
     expect(busy.get('[data-test=rescan]').attributes('disabled')).toBeDefined()
-    expect(busy.get('[data-test=rescan]').text()).toContain('Rescanning…')
+    expect(busy.get('[data-test=rescan]').text()).toContain('Scanning')
+    const counted = mount(AppHeader, {
+      props: { ...base, manualRefresh: true, scanning: true, progress: '23/63' },
+    })
+    expect(counted.get('[data-test=rescan]').text()).toContain('Scanning 23/63')
   })
 })
 
@@ -302,5 +308,143 @@ describe('ProjectList', () => {
     await w.findAll('[data-test=project] button')[0].trigger('click')
     expect(w.emitted('select')?.[0]).toEqual(['o/r'])
     expect(w.findAll('[data-test=project]')[1].classes()).toContain('bg-accent')
+  })
+})
+
+describe('AttentionList columns', () => {
+  const blocks = ['a/one', 'b/two', 'c/three'].map((fullName) => ({
+    repo: repo({ fullName, health: 'crit' }),
+    rows: buildBlocks(mixedState())[0].rows,
+  }))
+  const props = {
+    blocks,
+    nowMs,
+    critSeconds: CRIT_SECONDS,
+    facets: facetCounts(blocks, emptyFilters(), ['a', 'b', 'c']),
+    owners: ['a'],
+    active: 0,
+    filters: emptyFilters(),
+  }
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('uses one column on narrow screens', () => {
+    vi.stubGlobal('matchMedia', () => ({
+      matches: false,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }))
+    const w = mount(AttentionList, { props })
+    expect(w.findAll('[data-test=columns] > div')).toHaveLength(1)
+  })
+
+  it('balances groups over two columns on very wide screens', async () => {
+    vi.stubGlobal('matchMedia', () => ({
+      matches: true,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }))
+    const w = mount(AttentionList, { props })
+    await w.vm.$nextTick()
+    const cols = w.findAll('[data-test=columns] > div')
+    expect(cols).toHaveLength(2)
+    expect(cols[0].findAll('[data-test=repo-block]')).toHaveLength(2)
+    expect(cols[1].findAll('[data-test=repo-block]')).toHaveLength(1)
+  })
+})
+
+describe('ProjectList lazy loading', () => {
+  type Callback = (entries: { isIntersecting: boolean }[]) => void
+  let callback: Callback = () => {}
+
+  function stubObserver() {
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(cb: Callback) {
+          callback = cb
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    )
+  }
+  const many = (n: number) => Array.from({ length: n }, (_, i) => repo({ fullName: `o/repo-${i}` }))
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('renders a first page, then more each time the end marker scrolls into view', async () => {
+    stubObserver()
+    const w = mount(ProjectList, { props: { repos: many(55), total: 55, focused: null, nowMs } })
+    await w.vm.$nextTick()
+    expect(w.findAll('[data-test=project]')).toHaveLength(20)
+    expect(w.get('[data-test=more]').text()).toBe('Showing 20 of 55')
+    callback([{ isIntersecting: true }])
+    await w.vm.$nextTick()
+    expect(w.findAll('[data-test=project]')).toHaveLength(40)
+    callback([{ isIntersecting: false }])
+    await w.vm.$nextTick()
+    expect(w.findAll('[data-test=project]')).toHaveLength(40)
+    callback([{ isIntersecting: true }])
+    await w.vm.$nextTick()
+    expect(w.findAll('[data-test=project]')).toHaveLength(55)
+    expect(w.find('[data-test=more]').exists()).toBe(false)
+  })
+
+  it('starts over from the first page when the list changes', async () => {
+    stubObserver()
+    const w = mount(ProjectList, { props: { repos: many(55), total: 55, focused: null, nowMs } })
+    await w.vm.$nextTick()
+    callback([{ isIntersecting: true }])
+    await w.vm.$nextTick()
+    expect(w.findAll('[data-test=project]')).toHaveLength(40)
+    await (w as unknown as { setProps(p: object): Promise<void> }).setProps({ repos: many(30) })
+    expect(w.findAll('[data-test=project]')).toHaveLength(20)
+  })
+
+  it('renders everything when the browser has no IntersectionObserver', async () => {
+    vi.stubGlobal('IntersectionObserver', undefined)
+    const w = mount(ProjectList, { props: { repos: many(55), total: 55, focused: null, nowMs } })
+    await w.vm.$nextTick()
+    await w.vm.$nextTick()
+    expect(w.findAll('[data-test=project]')).toHaveLength(55)
+  })
+})
+
+describe('LoadingScreen', () => {
+  it('shows scan progress with a count once the server reports a total', () => {
+    const w = mount(LoadingScreen, { props: { done: 23, total: 63, connecting: false } })
+    expect(w.get('[data-test=loading-title]').text()).toBe('Scanning repositories')
+    expect(w.get('[data-test=loading-detail]').text()).toContain('23 of 63 scanned')
+    expect(w.get('[role=progressbar]').attributes('aria-valuenow')).toBe('37')
+  })
+
+  it('draws one skeleton cell per repo, within sensible limits', () => {
+    const cells = (total: number) =>
+      mount(LoadingScreen, { props: { done: 0, total, connecting: false } }).findAll(
+        '.grid-cols-\\[repeat\\(auto-fill\\,minmax\\(1\\.5rem\\,1fr\\)\\)\\] > div',
+      ).length
+    expect(cells(5)).toBe(12)
+    expect(cells(30)).toBe(30)
+    expect(cells(500)).toBe(63)
+  })
+
+  it('says it is connecting before the first response', () => {
+    const w = mount(LoadingScreen, { props: { done: 0, total: 0, connecting: true } })
+    expect(w.get('[data-test=loading-title]').text()).toBe('Connecting')
+    expect(w.find('[role=progressbar]').exists()).toBe(false)
+  })
+
+  it('uses an indeterminate bar while the total is not known yet', () => {
+    const w = mount(LoadingScreen, { props: { done: 0, total: 0, connecting: false } })
+    expect(w.get('[data-test=loading-detail]').text()).toContain('Contacting GitHub')
+    expect(w.find('[role=progressbar]').exists()).toBe(false)
+  })
+
+  it('is announced politely to screen readers', () => {
+    const w = mount(LoadingScreen, { props: { done: 1, total: 2, connecting: false } })
+    expect(w.attributes('role')).toBe('status')
+    expect(w.attributes('aria-live')).toBe('polite')
   })
 })

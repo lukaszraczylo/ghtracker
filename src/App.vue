@@ -3,6 +3,7 @@ import { storeToRefs } from 'pinia'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppHeader from '@/components/AppHeader.vue'
 import AttentionList from '@/components/AttentionList.vue'
+import LoadingScreen from '@/components/LoadingScreen.vue'
 import FleetOverview from '@/components/FleetOverview.vue'
 import ProjectList from '@/components/ProjectList.vue'
 import { filtersFromSearch, filtersToSearch } from '@/lib/filters'
@@ -26,9 +27,15 @@ const {
   visibleRepos,
   activeFilters,
   repoCounts,
+  rowCounts,
   facts,
 } = storeToRefs(store)
 const list = ref<InstanceType<typeof AttentionList> | null>(null)
+const progress = computed(() =>
+  state.value && scanning.value && state.value.scan.total > 0
+    ? `${state.value.scan.done}/${state.value.scan.total}`
+    : '',
+)
 const matching = computed(() => new Set(visibleRepos.value.map((r) => r.fullName)))
 let timers: number[] = []
 
@@ -71,6 +78,7 @@ onBeforeUnmount(() => {
       :interval-seconds="state?.intervalSeconds ?? 0"
       :loaded="state?.loaded ?? false"
       :scanning="scanning"
+      :progress="progress"
       :manual-refresh="state?.manualRefresh ?? false"
       @rescan="store.rescan()"
     />
@@ -83,19 +91,17 @@ onBeforeUnmount(() => {
       {{ notice }}
     </p>
 
-    <p v-if="!state" class="text-muted-foreground mt-16 text-3xl font-semibold">Loading</p>
-    <p
-      v-else-if="!state.loaded"
-      class="text-muted-foreground mt-16 text-3xl font-semibold"
-      data-test="waiting"
-    >
-      Fetching data from GitHub
-    </p>
+    <LoadingScreen
+      v-if="!state || !state.loaded"
+      :done="state?.scan.done ?? 0"
+      :total="state?.scan.total ?? 0"
+      :connecting="!state"
+    />
     <template v-else>
       <div class="mt-8 sm:mt-12">
         <FleetOverview
-          :crit="state.counts.crit"
-          :warn="state.counts.warn"
+          :crit="rowCounts.crit"
+          :warn="rowCounts.warn"
           :block-count="blocks.length"
           :repos="state.repos"
           :counts="repoCounts"

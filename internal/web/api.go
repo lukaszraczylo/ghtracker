@@ -16,6 +16,7 @@ type apiState struct {
 	Alerts          []apiAlert    `json:"alerts"`
 	Thresholds      apiThresholds `json:"thresholds"`
 	Counts          apiCounts     `json:"counts"`
+	Scan            apiScan       `json:"scan"`
 	IntervalSeconds int64         `json:"intervalSeconds"`
 	Loaded          bool          `json:"loaded"`
 	Refreshing      bool          `json:"refreshing"`
@@ -28,6 +29,12 @@ type apiThresholds struct {
 	IssueStaleSecs  int64 `json:"issueStaleSeconds"`
 	WorkflowStuck   int64 `json:"workflowStuckSeconds"`
 	WorkflowDormant int64 `json:"workflowDormantSeconds"`
+}
+
+// apiScan reports how far the running scan has got, for the loading screen.
+type apiScan struct {
+	Done  int `json:"done"`
+	Total int `json:"total"`
 }
 
 type apiCounts struct {
@@ -98,6 +105,7 @@ func buildState(v collector.View, manualRefresh bool) apiState {
 		Refreshing:      v.Refreshing,
 		ManualRefresh:   manualRefresh,
 		Counts:          apiCounts{Crit: v.Crit, Warn: v.Warn},
+		Scan:            apiScan{Done: v.ScanDone, Total: v.ScanTotal},
 		Thresholds: apiThresholds{
 			PRWarnSeconds:   seconds(v.Thresholds.PRWarnAfter),
 			PRCritSeconds:   seconds(v.Thresholds.PRCritAfter),
