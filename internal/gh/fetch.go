@@ -262,24 +262,28 @@ func (c *Client) workflows(ctx context.Context, full, branch string) ([]model.Wo
 		if w.State != "active" || len(out) >= maxWorkflows {
 			continue
 		}
-		var runs struct {
-			WorkflowRuns []rawRun `json:"workflow_runs"`
-		}
-		q := url.Values{
-			"branch":                {branch},
-			"exclude_pull_requests": {"true"},
-			"per_page":              {fmt.Sprint(runsPerWorkflow)},
-		}
-		path := fmt.Sprintf("/repos/%s/actions/workflows/%d/runs", full, w.ID)
-		if err := c.getJSON(ctx, full, path, q, &runs); err != nil {
+		runs, err := c.workflowRuns(ctx, full, w.ID, branch, false)
+		if err != nil {
 			if first == nil {
 				first = fmt.Errorf("%s: %w", w.Name, err)
 			}
 			continue
 		}
-		if wf, ok := buildWorkflow(w.Name, w.HTMLURL, runs.WorkflowRuns); ok {
-			out = append(out, wf)
+		wf, ok := buildWorkflow(w.Name, w.HTMLURL, runs)
+		if !ok {
+			continue
 		}
+		// GitHub sometimes answers a run listing from a lagging replica, and a reused connection
+		// keeps hitting it. A failure is what raises an alert, so confirm it on a new connection
+		// and keep the union of both answers.
+		if wf.LastDone != nil && wf.LastDone.Failed() {
+			if again, err := c.workflowRuns(ctx, full, w.ID, branch, true); err == nil {
+				if merged, ok := buildWorkflow(w.Name, w.HTMLURL, mergeRuns(runs, again)); ok {
+					wf = merged
+				}
+			}
+		}
+		out = append(out, wf)
 	}
 	return out, first
 }
@@ -342,4 +346,37 @@ func (c *Client) latestRelease(ctx context.Context, full, repoURL string) (*mode
 		URL:     repoURL + "/releases/tag/" + url.PathEscape(tags[0].Name),
 		FromTag: true,
 	}, nil
+}
+
+func (c *Client) workflowRuns(ctx context.Context, full string, id int64, branch string, fresh bool) ([]rawRun, error) {
+	var out struct {
+		WorkflowRuns []rawRun `json:"workflow_runs"`
+	}
+	q := url.Values{
+		"branch":                {branch},
+		"exclude_pull_requests": {"true"},
+		"per_page":              {fmt.Sprint(runsPerWorkflow)},
+	}
+	path := fmt.Sprintf("/repos/%s/actions/workflows/%d/runs", full, id)
+	get := c.getJSON
+	if fresh {
+		get = c.getJSONFresh
+	}
+	if err := get(ctx, full, path, q, &out); err != nil {
+		return nil, err
+	}
+	return out.WorkflowRuns, nil
+}
+
+// mergeRuns returns the runs of a and b once each, keyed by run ID.
+func mergeRuns(a, b []rawRun) []rawRun {
+	seen := make(map[int64]bool, len(a)+len(b))
+	out := make([]rawRun, 0, len(a)+len(b))
+	for _, r := range slices.Concat(a, b) {
+		if !seen[r.ID] {
+			seen[r.ID] = true
+			out = append(out, r)
+		}
+	}
+	return out
 }

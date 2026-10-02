@@ -66,6 +66,8 @@ type TokenSource interface {
 }
 
 type Client struct {
+	// freshHC opens a new connection for every request.
+	freshHC      *http.Client
 	rateReset    time.Time
 	blockedUntil time.Time
 	auth         TokenSource
@@ -88,7 +90,7 @@ type cachedResponse struct {
 }
 
 func NewClient(baseURL string, auth TokenSource, hc *http.Client, maxItems int) *Client {
-	c := &Client{base: strings.TrimRight(baseURL, "/"), hc: hc, auth: auth, maxItems: maxItems, sleep: sleepCtx, now: time.Now, cache: map[string]cachedResponse{}}
+	c := &Client{base: strings.TrimRight(baseURL, "/"), hc: hc, freshHC: freshClient(hc), auth: auth, maxItems: maxItems, sleep: sleepCtx, now: time.Now, cache: map[string]cachedResponse{}}
 	c.rateRemaining.Store(-1)
 	return c
 }
@@ -111,7 +113,9 @@ func sleepCtx(ctx context.Context, d time.Duration) error {
 }
 
 // do performs one authenticated GET, retrying transient failures, and returns the body and Link header.
-func (c *Client) do(ctx context.Context, repo, target string) ([]byte, string, error) {
+// do performs one authenticated GET, retrying transient failures. fresh sends it on a new connection
+// and skips the response cache, so a stale GitHub replica behind a reused connection cannot answer it.
+func (c *Client) do(ctx context.Context, repo, target string, fresh bool) ([]byte, string, error) {
 	var lastErr error
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
@@ -119,7 +123,7 @@ func (c *Client) do(ctx context.Context, repo, target string) ([]byte, string, e
 				return nil, "", err
 			}
 		}
-		body, link, retry, err := c.once(ctx, repo, target)
+		body, link, retry, err := c.once(ctx, repo, target, fresh)
 		if err == nil {
 			return body, link, nil
 		}
@@ -131,7 +135,7 @@ func (c *Client) do(ctx context.Context, repo, target string) ([]byte, string, e
 	return nil, "", lastErr
 }
 
-func (c *Client) once(ctx context.Context, repo, target string) (body []byte, link string, retry bool, err error) {
+func (c *Client) once(ctx context.Context, repo, target string, fresh bool) (body []byte, link string, retry bool, err error) {
 	if gerr := c.guard(); gerr != nil {
 		return nil, "", false, gerr
 	}
@@ -150,10 +154,15 @@ func (c *Client) once(ctx context.Context, repo, target string) (body []byte, li
 	c.mu.Lock()
 	cached, haveCache := c.cache[target]
 	c.mu.Unlock()
+	haveCache = haveCache && !fresh
 	if haveCache {
 		req.Header.Set("If-None-Match", cached.etag)
 	}
-	resp, err := c.hc.Do(req)
+	hc := c.hc
+	if fresh {
+		hc = c.freshHC
+	}
+	resp, err := hc.Do(req)
 	if err != nil {
 		return nil, "", ctx.Err() == nil, err
 	}
@@ -174,7 +183,7 @@ func (c *Client) once(ctx context.Context, repo, target string) (body []byte, li
 		return nil, "", resp.StatusCode >= 500, ae
 	}
 	link = resp.Header.Get("Link")
-	if etag := resp.Header.Get("ETag"); etag != "" {
+	if etag := resp.Header.Get("ETag"); etag != "" && !fresh {
 		c.mu.Lock()
 		c.cache[target] = cachedResponse{etag: etag, body: data, link: link}
 		c.mu.Unlock()
@@ -241,7 +250,16 @@ func (c *Client) url(path string, q url.Values) string {
 }
 
 func (c *Client) getJSON(ctx context.Context, repo, path string, q url.Values, out any) error {
-	body, _, err := c.do(ctx, repo, c.url(path, q))
+	return c.getJSONMode(ctx, repo, path, q, out, false)
+}
+
+// getJSONFresh is getJSON on a new connection without the response cache.
+func (c *Client) getJSONFresh(ctx context.Context, repo, path string, q url.Values, out any) error {
+	return c.getJSONMode(ctx, repo, path, q, out, true)
+}
+
+func (c *Client) getJSONMode(ctx context.Context, repo, path string, q url.Values, out any, fresh bool) error {
+	body, _, err := c.do(ctx, repo, c.url(path, q), fresh)
 	if err != nil {
 		return err
 	}
@@ -257,7 +275,7 @@ func listAll[T any](ctx context.Context, c *Client, repo, path string, q url.Val
 	next := c.url(path, q)
 	var all []T
 	for next != "" && len(all) < limit {
-		body, link, err := c.do(ctx, repo, next)
+		body, link, err := c.do(ctx, repo, next, false)
 		if err != nil {
 			return all, err
 		}
@@ -288,4 +306,19 @@ func nextLink(h string) string {
 		}
 	}
 	return ""
+}
+
+// freshClient copies hc but turns off connection reuse. Custom transports that are not an
+// *http.Transport are used as they are.
+func freshClient(hc *http.Client) *http.Client {
+	tr, ok := hc.Transport.(*http.Transport)
+	if !ok {
+		if hc.Transport != nil {
+			return hc
+		}
+		tr, _ = http.DefaultTransport.(*http.Transport)
+	}
+	clone := tr.Clone()
+	clone.DisableKeepAlives = true
+	return &http.Client{Transport: clone, Timeout: hc.Timeout}
 }

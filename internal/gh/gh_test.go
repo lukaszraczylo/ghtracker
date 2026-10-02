@@ -459,3 +459,97 @@ func TestAPIErrorMessageParsing(t *testing.T) {
 		t.Fatalf("len=%d", len(got))
 	}
 }
+
+// staleThenFresh serves an old failing run on the first request and the current runs afterwards,
+// like a lagging GitHub replica followed by a healthy one.
+func staleThenFresh(f *fakeGitHub, path string) *atomic.Int64 {
+	var calls atomic.Int64
+	f.routes[path] = func(w http.ResponseWriter, r *http.Request) {
+		n := calls.Add(1)
+		if n == 1 {
+			_, _ = w.Write([]byte(`{"workflow_runs":[
+			  {"id":1,"html_url":"old","event":"schedule","head_branch":"main","status":"completed","conclusion":"failure","created_at":"2026-09-11T03:02:00Z"}]}`))
+			return
+		}
+		if r.Header.Get("If-None-Match") != "" {
+			http.Error(w, "fresh requests must not be conditional", http.StatusBadRequest)
+			return
+		}
+		_, _ = w.Write([]byte(`{"workflow_runs":[
+		  {"id":3,"html_url":"new","event":"schedule","head_branch":"main","status":"completed","conclusion":"success","created_at":"2026-10-02T03:03:00Z"},
+		  {"id":1,"html_url":"old","event":"schedule","head_branch":"main","status":"completed","conclusion":"failure","created_at":"2026-09-11T03:02:00Z"}]}`))
+	}
+	return &calls
+}
+
+func TestStaleFailureIsConfirmedOnANewConnection(t *testing.T) {
+	f := newFake(t)
+	c := f.client(t, 10)
+	f.json("/repos/o/r/actions/workflows", `{"workflows":[{"id":7,"name":"Autoupdate","html_url":"w","state":"active"}]}`)
+	calls := staleThenFresh(f, "/repos/o/r/actions/workflows/7/runs")
+	wfs, err := c.workflows(context.Background(), "o/r", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(wfs) != 1 || wfs[0].Latest.ID != 3 || wfs[0].LastDone == nil || wfs[0].LastDone.Failed() {
+		t.Fatalf("the newer success must supersede the stale failure: %+v", wfs)
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("runs requested %d times, want 2", calls.Load())
+	}
+}
+
+func TestHealthyWorkflowIsNotRequestedTwice(t *testing.T) {
+	f := newFake(t)
+	c := f.client(t, 10)
+	f.json("/repos/o/r/actions/workflows", `{"workflows":[{"id":7,"name":"CI","html_url":"w","state":"active"}]}`)
+	var calls atomic.Int64
+	f.routes["/repos/o/r/actions/workflows/7/runs"] = func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		_, _ = w.Write([]byte(`{"workflow_runs":[{"id":3,"event":"push","head_branch":"main","status":"completed","conclusion":"success","created_at":"2026-10-02T03:03:00Z"}]}`))
+	}
+	if _, err := c.workflows(context.Background(), "o/r", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("a passing workflow needs one request, got %d", calls.Load())
+	}
+}
+
+func TestConfirmedFailureStaysFailing(t *testing.T) {
+	f := newFake(t)
+	c := f.client(t, 10)
+	f.json("/repos/o/r/actions/workflows", `{"workflows":[{"id":7,"name":"CI","html_url":"w","state":"active"}]}`)
+	f.json("/repos/o/r/actions/workflows/7/runs", `{"workflow_runs":[{"id":3,"event":"push","head_branch":"main","status":"completed","conclusion":"failure","created_at":"2026-10-02T03:03:00Z"}]}`)
+	wfs, err := c.workflows(context.Background(), "o/r", "main")
+	if err != nil || len(wfs) != 1 || wfs[0].LastDone == nil || !wfs[0].LastDone.Failed() {
+		t.Fatalf("a failure that both answers agree on must stay: %+v %v", wfs, err)
+	}
+}
+
+func TestMergeRunsKeepsEachRunOnce(t *testing.T) {
+	got := mergeRuns([]rawRun{{ID: 1}, {ID: 2}}, []rawRun{{ID: 2}, {ID: 3}})
+	if len(got) != 3 || got[0].ID != 1 || got[1].ID != 2 || got[2].ID != 3 {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestFreshClientDisablesConnectionReuse(t *testing.T) {
+	base := &http.Client{Transport: &http.Transport{}, Timeout: 5 * time.Second}
+	fc := freshClient(base)
+	tr, ok := fc.Transport.(*http.Transport)
+	if !ok || !tr.DisableKeepAlives || fc.Timeout != 5*time.Second {
+		t.Fatalf("fresh client: %+v", fc)
+	}
+	if base.Transport.(*http.Transport).DisableKeepAlives {
+		t.Fatal("the original client must keep its connections")
+	}
+	custom := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("x") })}
+	if freshClient(custom) != custom {
+		t.Fatal("non-standard transports are used as they are")
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
