@@ -1,0 +1,12 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ghtracker
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ghtracker
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 5m # series are computed from cached data; scraping faster adds nothing

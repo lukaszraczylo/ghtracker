@@ -1,0 +1,16 @@
+# Replace the host. The dashboard has no authentication: keep it on an internal entrypoint
+# or add a Traefik auth middleware before exposing it.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: ghtracker
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`ghtracker.example.com`)
+      kind: Rule
+      services:
+        - name: ghtracker
+          port: 80
+  tls: {}

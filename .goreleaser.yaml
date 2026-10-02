@@ -1,0 +1,88 @@
+version: 2
+
+# GoReleaser cleans its output directory on `--clean`. The UI build lives in dist/,
+# so release output goes elsewhere.
+dist: release-out
+
+builds:
+  - id: ghtracker
+    main: .
+    binary: ghtracker
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+
+archives:
+  - id: ghtracker
+    formats: [tar.gz]
+    name_template: 'ghtracker-{{ .Os }}-{{ .Arch }}'
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+      - config.example.yaml
+
+checksum:
+  name_template: 'ghtracker-checksums.txt'
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^chore:'
+      - '^style:'
+      - '^Merge'
+
+release:
+  github:
+    owner: lukaszraczylo
+    name: ghtracker
+  name_template: 'v{{ .Version }}'
+  prerelease: auto
+
+dockers_v2:
+  - images:
+      - ghcr.io/lukaszraczylo/ghtracker
+    tags:
+      - '{{ .Version }}'
+      - latest
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    dockerfile: Dockerfile.goreleaser
+    labels:
+      org.opencontainers.image.source: https://github.com/lukaszraczylo/ghtracker
+      org.opencontainers.image.description: Dashboard and Prometheus metrics for GitHub repositories
+      org.opencontainers.image.licenses: MIT
+      org.opencontainers.image.version: '{{ .Version }}'
+
+signs:
+  - cmd: cosign
+    signature: '${artifact}.sigstore.json'
+    args:
+      - sign-blob
+      - '--bundle=${signature}'
+      - '${artifact}'
+      - '--yes'
+    artifacts: checksum
+    output: true
+
+docker_signs:
+  - cmd: cosign
+    artifacts: manifests
+    output: true
+    args:
+      - sign
+      - '${artifact}@${digest}'
+      - '--yes'

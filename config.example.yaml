@@ -1,0 +1,23 @@
+listen: ':8080'
+refresh_interval: 6h # minimum 1m; each cycle costs roughly 6 + 2 per open PR requests per repo
+manual_refresh: true # the Refresh button and POST /refresh, limited to once per 5m; false disables them
+
+github:
+  app_id: 123456
+  private_key_file: /secrets/ghtracker.pem # or set $GHTRACKER_PRIVATE_KEY to the PEM contents
+  installation_id: 0 # 0 = discover per repo; needed when repos span several owners
+  api_url: https://api.github.com
+
+thresholds: # negative disables a check
+  pr_warn_after: 48h # non-draft PR open this long = warning
+  pr_crit_after: 168h # critical
+  issue_stale_after: 720h # no activity this long = warning (aggregated per repo)
+  workflow_stuck_after: 6h # queued / in progress this long = warning
+
+max_items: 100 # per repo, issues and PRs
+concurrency: 2
+
+repos:
+  - lukaszraczylo/kubemirror
+  - lukaszraczylo/semver-generator
+  - lukaszraczylo/traefikoidc

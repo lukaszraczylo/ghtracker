@@ -1,0 +1,8 @@
+.git
+ghtracker
+*.pem
+config.yaml
+deploy
+node_modules
+dist
+coverage

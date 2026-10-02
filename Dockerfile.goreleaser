@@ -1,0 +1,5 @@
+FROM gcr.io/distroless/static-debian12:nonroot
+ARG TARGETPLATFORM
+COPY ${TARGETPLATFORM}/ghtracker /ghtracker
+EXPOSE 8080
+ENTRYPOINT ["/ghtracker", "-config", "/config/config.yaml"]

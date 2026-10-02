@@ -1,0 +1,82 @@
+@import 'tailwindcss';
+
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
+:root {
+  --background: #f3f1ea;
+  --surface: #fbfaf6;
+  --foreground: #1b1a17;
+  --muted-foreground: #66625a;
+  --border: #dcd7ca;
+  --link: #0b5c8a;
+  --crit: #c4291c;
+  --warn: #8f5b00;
+  --ok: #17794d;
+  --primary: #0b5c8a;
+  --primary-foreground: #ffffff;
+  --secondary: #e7e3d9;
+  --secondary-foreground: #1b1a17;
+  --muted: #ebe8df;
+  --accent: #e7e3d9;
+  --accent-foreground: #1b1a17;
+  --destructive: #c4291c;
+  --input: #cdc8bb;
+  --ring: #0b5c8a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0d0d0c;
+    --surface: #151513;
+    --foreground: #eceae3;
+    --muted-foreground: #98948a;
+    --border: #272622;
+    --link: #7dbdf0;
+    --crit: #ff6a5c;
+    --warn: #f2b43a;
+    --ok: #4cc38a;
+    --primary: #7dbdf0;
+    --primary-foreground: #0b1620;
+    --secondary: #201f1c;
+    --secondary-foreground: #eceae3;
+    --muted: #1b1a18;
+    --accent: #22211e;
+    --accent-foreground: #eceae3;
+    --destructive: #ff6a5c;
+    --input: #38362f;
+    --ring: #7dbdf0;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-link: var(--link);
+  --color-crit: var(--crit);
+  --color-warn: var(--warn);
+  --color-ok: var(--ok);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --font-sans: 'Schibsted Grotesk Variable', 'Avenir Next', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-link;
+  }
+}

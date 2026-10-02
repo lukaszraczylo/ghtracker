@@ -1,0 +1,8 @@
+/ghtracker
+config.yaml
+*.pem
+node_modules
+coverage
+dist/*
+!dist/.gitkeep
+release-out
