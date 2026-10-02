@@ -1,0 +1,903 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ghtracker: see which GitHub repositories need attention</title>
+<meta name="description" content="ghtracker scans the GitHub repositories you list through a GitHub App and shows what is failing: workflows, pull requests that wait too long, stale issues. Dashboard and Prometheus metrics in one binary. MIT licence.">
+<link rel="canonical" href="https://ghtracker.raczylo.com/">
+<meta name="color-scheme" content="dark light">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="ghtracker">
+<meta property="og:title" content="ghtracker: see which GitHub repositories need attention">
+<meta property="og:description" content="Failing workflows, waiting pull requests and stale issues across your GitHub repositories. Prometheus metrics included. MIT licence.">
+<meta property="og:url" content="https://ghtracker.raczylo.com/">
+<meta property="og:image" content="https://ghtracker.raczylo.com/ghtracker-screenshot-dark.png">
+<meta property="og:image:alt" content="ghtracker dashboard: 10 critical alerts and 1 warning across 20 projects, a health strip with one segment per project, and failing workflows and pull requests grouped by repository">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="ghtracker: see which GitHub repositories need attention">
+<meta name="twitter:description" content="Failing workflows, waiting pull requests and stale issues across your GitHub repositories. Prometheus metrics included.">
+<meta name="twitter:image" content="https://ghtracker.raczylo.com/ghtracker-screenshot-dark.png">
+<link rel="icon" href="ghtracker-logo-dark.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "ghtracker",
+  "description": "Dashboard and Prometheus metrics for GitHub repositories. Scans a list of repositories through a GitHub App and shows failing workflows, pull requests that wait too long and stale issues.",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Linux, macOS, Windows",
+  "programmingLanguage": ["Go", "TypeScript"],
+  "url": "https://ghtracker.raczylo.com/",
+  "downloadUrl": "https://github.com/lukaszraczylo/ghtracker/releases",
+  "codeRepository": "https://github.com/lukaszraczylo/ghtracker",
+  "license": "https://github.com/lukaszraczylo/ghtracker/blob/main/LICENSE",
+  "isAccessibleForFree": true,
+  "image": "https://ghtracker.raczylo.com/ghtracker-screenshot-dark.png",
+  "author": { "@type": "Person", "name": "Lukasz Raczylo" }
+}
+</script>
+<script>
+(function () {
+  var d = document.documentElement;
+  d.classList.add("js");
+  try { var t = localStorage.getItem("ghtracker-theme"); if (t === "light" || t === "dark") d.setAttribute("data-theme", t); } catch (e) {}
+})();
+</script>
+<style>
+:root {
+  --bg: #0d0e10;
+  --surface: #14161a;
+  --surface-2: #1b1e23;
+  --line: #2a2e35;
+  --fg: #e8eaed;
+  --fg-dim: #c4c9d0;
+  --muted: #9aa2ad;
+  --accent: #7cb7ff;
+  --on-accent: #0d0e10;
+  --code-str: #d6dae0;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --bg: #ffffff; --surface: #f6f7f8; --surface-2: #eceef1; --line: #d3d8de;
+    --fg: #14171a; --fg-dim: #343b43; --muted: #555f6a; --accent: #0b5bd3; --on-accent: #ffffff; --code-str: #2b3138;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --surface: #f6f7f8; --surface-2: #eceef1; --line: #d3d8de;
+  --fg: #14171a; --fg-dim: #343b43; --muted: #555f6a; --accent: #0b5bd3; --on-accent: #ffffff; --code-str: #2b3138;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 400 1rem/1.6 var(--sans); overflow-wrap: break-word; }
+img { max-width: 100%; height: auto; display: block; }
+a { color: var(--accent); text-underline-offset: 0.2em; }
+a:hover { text-decoration-thickness: 2px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code, kbd, pre { font-family: var(--mono); font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
+p code, li code, td code, dd code, th code, summary code { background: var(--surface-2); border: 1px solid var(--line); padding: 0.05em 0.35em; font-size: 0.88em; overflow-wrap: anywhere; }
+kbd { background: var(--surface-2); border: 1px solid var(--line); border-bottom-width: 2px; padding: 0.05em 0.4em; font-size: 0.85em; white-space: nowrap; }
+.wrap { width: 100%; max-width: 74rem; margin: 0 auto; padding: 0 1.25rem; }
+.skip { position: absolute; left: 0.5rem; top: -4rem; background: var(--accent); color: var(--on-accent); padding: 0.5rem 0.9rem; z-index: 100; font-weight: 600; }
+.skip:focus { top: 0.5rem; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* header */
+.site-header { position: sticky; top: 0; z-index: 50; background: var(--bg); border-bottom: 1px solid var(--line); }
+.site-header .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 0 1.25rem; }
+.brand { display: flex; align-items: center; padding: 0.4rem 0; }
+.brand img { height: 3.1rem; width: auto; }
+.logo-dark { display: block; }
+.logo-light { display: none; }
+@media (prefers-color-scheme: light) { :root:not([data-theme]) .logo-dark { display: none; } :root:not([data-theme]) .logo-light { display: block; } }
+:root[data-theme="light"] .logo-dark { display: none; }
+:root[data-theme="light"] .logo-light { display: block; }
+.head-actions { margin-left: auto; display: flex; align-items: center; gap: 0.75rem; }
+.head-actions a { color: var(--fg-dim); text-decoration: none; font-size: 0.92rem; font-weight: 500; padding: 0.5rem 0.25rem; }
+.head-actions a:hover { color: var(--fg); text-decoration: underline; }
+.icon-btn { font: 500 0.85rem var(--sans); color: var(--fg-dim); background: transparent; border: 1px solid var(--line); padding: 0.4rem 0.75rem; min-height: 2.25rem; cursor: pointer; }
+.icon-btn:hover { color: var(--fg); border-color: var(--muted); }
+.primary-nav { order: 3; width: 100%; display: flex; gap: 0.25rem 1.1rem; overflow-x: auto; white-space: nowrap; padding-bottom: 0.1rem; scrollbar-width: thin; }
+.primary-nav a { color: var(--muted); text-decoration: none; font-size: 0.92rem; font-weight: 500; padding: 0.55rem 0; border-bottom: 2px solid transparent; }
+.primary-nav a:hover { color: var(--fg); border-bottom-color: var(--accent); }
+@media (min-width: 62rem) {
+  .primary-nav { order: 1; width: auto; flex: 1; padding: 0; overflow: visible; }
+  .primary-nav a { padding: 1.05rem 0; }
+  .head-actions { order: 2; margin-left: 0; }
+}
+
+/* sections */
+section[id], .scroll-target { scroll-margin-top: 7rem; }
+.section { padding: 4rem 0; border-top: 1px solid var(--line); }
+.section-head { max-width: 46rem; margin-bottom: 2rem; }
+.eyebrow { font: 500 0.78rem var(--mono); color: var(--accent); letter-spacing: 0.06em; text-transform: uppercase; margin: 0 0 0.75rem; }
+h1, h2, h3, h4 { line-height: 1.2; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: clamp(1.7rem, 4.2vw, 2.4rem); font-weight: 650; }
+h3 { font-size: 1.3rem; font-weight: 600; }
+h4 { font-size: 1.02rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
+.section-head p:not(.eyebrow) { color: var(--muted); font-size: 1.08rem; margin: 0.9rem 0 0; }
+p { margin: 0 0 1rem; }
+ul, ol { margin: 0 0 1rem; padding-left: 1.2rem; }
+li { margin: 0.3rem 0; }
+.muted { color: var(--muted); }
+.small { font-size: 0.9rem; }
+
+/* hero */
+.hero { padding: 3rem 0 3.5rem; }
+.hero-grid { display: grid; gap: 2.5rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 62rem) { .hero-grid { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 3rem; } .hero { padding: 4.5rem 0 4.5rem; } }
+h1 { font-size: clamp(2.1rem, 6.4vw, 3.4rem); font-weight: 700; letter-spacing: -0.025em; line-height: 1.08; }
+.lead { font-size: 1.12rem; color: var(--fg-dim); margin: 1.25rem 0 1.75rem; max-width: 36rem; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.5rem 0 1.75rem; }
+.btn { display: inline-block; font: 600 0.95rem var(--sans); padding: 0.7rem 1.25rem; border: 1px solid var(--accent); text-decoration: none; min-height: 2.75rem; }
+.btn-primary { background: var(--accent); color: var(--on-accent); }
+.btn-primary:hover { text-decoration: underline; }
+.btn-secondary { background: transparent; color: var(--accent); }
+.btn-secondary:hover { background: var(--surface-2); }
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; margin: 0; border: 1px solid var(--line); max-width: 36rem; }
+.facts div { padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--line); }
+.facts div:nth-child(odd) { border-right: 1px solid var(--line); }
+.facts div:nth-last-child(-n+2) { border-bottom: 0; }
+.facts dt { font: 500 0.72rem var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.facts dd { margin: 0.15rem 0 0; font-size: 0.95rem; font-weight: 500; }
+
+/* code + terminal */
+.code { position: relative; background: var(--surface); border: 1px solid var(--line); margin: 0 0 1rem; min-width: 0; }
+.code-head { font: 500 0.78rem var(--mono); color: var(--muted); padding: 0.55rem 5rem 0.55rem 1rem; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+.code pre, .term pre { margin: 0; padding: 1rem; overflow-x: auto; font-size: 0.82rem; line-height: 1.6; tab-size: 2; }
+.code[data-copy] pre { padding-right: 5rem; }
+.code[data-copy] .code-head + pre { padding-right: 1rem; }
+.code code { color: var(--code-str); }
+.k { color: var(--accent); }
+.c { color: var(--muted); font-style: italic; }
+.copy { position: absolute; top: 0.45rem; right: 0.45rem; font: 500 0.75rem var(--sans); color: var(--fg-dim); background: var(--bg); border: 1px solid var(--line); padding: 0.25rem 0.6rem; min-height: 1.75rem; cursor: pointer; z-index: 2; }
+.copy:hover { color: var(--fg); border-color: var(--muted); }
+.copy.done { color: var(--accent); border-color: var(--accent); }
+.term { --t-bg: #0b0c0e; --t-fg: #d9dce1; --t-mut: #8d949e; --t-acc: #7cb7ff; background: var(--t-bg); border: 1px solid var(--line); margin: 0 0 1rem; min-width: 0; color: var(--t-fg); }
+.term-bar { display: flex; align-items: center; gap: 0.4rem; padding: 0.55rem 0.9rem; border-bottom: 1px solid #262a30; }
+.term-bar i { width: 0.65rem; height: 0.65rem; border-radius: 50%; background: #3a3f47; display: block; }
+.term-bar span { margin-left: 0.5rem; font: 500 0.75rem var(--mono); color: var(--t-mut); }
+.term code { color: var(--t-fg); }
+.term .h { color: var(--t-acc); font-weight: 600; }
+.term .m { color: var(--t-mut); }
+.term .a { color: var(--t-acc); }
+.term .sel { background: #23272e; display: inline-block; min-width: 100%; }
+.term .b { font-weight: 600; }
+.hero .term pre { font-size: 0.8rem; }
+.shot-frame { border: 1px solid var(--line); background: #0b0c0e; margin: 0; }
+.shot-frame img { width: 100%; }
+figcaption { font-size: 0.88rem; color: var(--muted); padding: 0.7rem 1rem; border-top: 1px solid var(--line); background: var(--surface); }
+
+/* feature rows */
+.feature { display: grid; gap: 1.5rem 3rem; grid-template-columns: minmax(0, 1fr); padding: 2.75rem 0; border-top: 1px solid var(--line); align-items: start; }
+.feature:first-of-type { border-top: 0; padding-top: 0.5rem; }
+.feature .text p, .feature .text li { color: var(--fg-dim); }
+.feature .text h3 { margin-bottom: 0.9rem; }
+.feature .text .tag { font: 500 0.75rem var(--mono); color: var(--accent); margin: 0 0 0.6rem; letter-spacing: 0.04em; text-transform: uppercase; }
+.feature .demo > :last-child { margin-bottom: 0; }
+.feature .demo .caption { font-size: 0.85rem; color: var(--muted); margin: -0.35rem 0 1rem; }
+@media (min-width: 62rem) {
+  .feature { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); }
+  .feature.rev .text { order: 2; }
+  .feature.rev .demo { order: 1; }
+}
+
+/* tables */
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); margin: 0 0 1rem; background: var(--bg); }
+table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; vertical-align: top; padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--line); }
+tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
+thead th { background: var(--surface); font-weight: 600; white-space: nowrap; position: relative; }
+tbody th { font-weight: 500; background: var(--bg); }
+.tablewrap.wrap-cells td, .tablewrap.wrap-cells th { white-space: normal; }
+.cmp { min-width: 54rem; }
+.cmp thead th:first-child, .cmp tbody th { position: sticky; left: 0; z-index: 1; border-right: 1px solid var(--line); min-width: 11.5rem; max-width: 14rem; }
+.cmp thead th:first-child { z-index: 2; background: var(--surface); }
+.cmp td { min-width: 9.5rem; }
+.cmp thead th.us, .cmp td.us { background: var(--surface); }
+.y { color: var(--accent); font-weight: 600; }
+.p { color: var(--fg); font-weight: 500; }
+.nd { color: var(--muted); font-style: italic; }
+.no { color: var(--fg); }
+.cell-note { display: block; font-size: 0.78rem; color: var(--muted); font-weight: 400; font-style: normal; margin-top: 0.15rem; }
+.cmp-meta { display: grid; gap: 1.5rem 3rem; grid-template-columns: minmax(0, 1fr); margin-top: 2rem; }
+@media (min-width: 52rem) { .cmp-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.note { border: 1px solid var(--line); border-left: 3px solid var(--accent); background: var(--surface); padding: 0.8rem 1rem; margin: 0 0 1.5rem; font-size: 0.95rem; }
+.note p:last-child { margin-bottom: 0; }
+
+/* install tabs */
+.tablist { display: flex; flex-wrap: wrap; gap: 0; border-bottom: 1px solid var(--line); margin-bottom: 1.5rem; overflow-x: auto; }
+.tablist button { font: 500 0.92rem var(--sans); color: var(--muted); background: transparent; border: 0; border-bottom: 2px solid transparent; padding: 0.75rem 1.1rem; margin-bottom: -1px; cursor: pointer; white-space: nowrap; min-height: 2.75rem; }
+.tablist button:hover { color: var(--fg); }
+.tablist button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+.tabpanel { margin-bottom: 2rem; }
+.js .tabpanel { margin-bottom: 0; }
+.js .tabpanel > h3 { display: none; }
+.tabpanel > h3 { font-size: 1.1rem; margin-bottom: 0.75rem; }
+.tabpanel p { color: var(--fg-dim); max-width: 46rem; }
+.tabpanel .code, .tabpanel .term { max-width: 52rem; }
+
+/* misc layouts */
+.two { display: grid; gap: 1.5rem 3rem; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 52rem) { .two { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 0 0 1.5rem; }
+.steps li { counter-increment: s; position: relative; padding: 0.15rem 0 0.9rem 2.75rem; color: var(--fg-dim); }
+.steps li::before { content: counter(s); position: absolute; left: 0; top: 0.1rem; width: 1.9rem; height: 1.9rem; border: 1px solid var(--line); font: 500 0.82rem/1.8rem var(--mono); text-align: center; color: var(--accent); background: var(--surface); }
+details { border-top: 1px solid var(--line); padding: 0.9rem 0; }
+details:last-of-type { border-bottom: 1px solid var(--line); }
+summary { cursor: pointer; font-weight: 600; list-style: none; padding-right: 1.5rem; position: relative; }
+summary::-webkit-details-marker { display: none; }
+summary::after { content: "+"; position: absolute; right: 0; top: 0; font-family: var(--mono); color: var(--accent); }
+details[open] summary::after { content: "\2212"; }
+details p, details ul { color: var(--fg-dim); margin-top: 0.75rem; max-width: 46rem; }
+.status-dot { font-family: var(--mono); white-space: nowrap; }
+.inline-list { list-style: none; padding: 0; margin: 0 0 1rem; display: flex; flex-wrap: wrap; gap: 0.4rem 0.5rem; }
+.inline-list li { margin: 0; }
+.inline-list code { display: inline-block; }
+
+/* footer */
+.site-footer { border-top: 1px solid var(--line); padding: 2.5rem 0 3rem; color: var(--muted); font-size: 0.92rem; }
+.foot-grid { display: grid; gap: 1.75rem 3rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 52rem) { .foot-grid { grid-template-columns: 2fr 1fr 1fr 1fr; } }
+.site-footer h2 { font: 600 0.8rem var(--mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg); margin: 0 0 0.75rem; }
+.site-footer ul { list-style: none; padding: 0; margin: 0; }
+.site-footer li { margin: 0.35rem 0; }
+.site-footer a { color: var(--fg-dim); }
+.foot-brand { grid-column: 1 / -1; }
+@media (min-width: 52rem) { .foot-brand { grid-column: auto; } }
+.foot-bottom { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: 1.25rem; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+@media (max-width: 40rem) {
+  .section { padding: 3rem 0; }
+  .feature { padding: 2rem 0; }
+  .code pre, .term pre { font-size: 0.78rem; }
+}
+
+/* ghtracker additions */
+.shot { margin: 0; border: 1px solid var(--line); background: var(--surface); }
+.shot picture, .shot img { display: block; width: 100%; }
+.numbers { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); border: 1px solid var(--line); margin: 0 0 1rem; }
+.numbers div { padding: 0.9rem 1rem; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: -1px 0 0 -1px; }
+.numbers dt { font: 500 0.78rem var(--mono); color: var(--muted); }
+.numbers dd { margin: 0.25rem 0 0; font-size: 1.05rem; font-weight: 600; }
+.sev-crit { color: #ff6a5c; font-weight: 600; } .sev-warn { color: #f2b43a; font-weight: 600; } .sev-ok { color: #4cc38a; font-weight: 600; }
+:root[data-theme="light"] .sev-crit { color: #c4291c; } :root[data-theme="light"] .sev-warn { color: #8f5b00; } :root[data-theme="light"] .sev-ok { color: #17794d; }
+@media (prefers-color-scheme: light) { :root:not([data-theme]) .sev-crit { color: #c4291c; } :root:not([data-theme]) .sev-warn { color: #8f5b00; } :root:not([data-theme]) .sev-ok { color: #17794d; } }
+</style></head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="ghtracker home">
+      <img class="logo-dark" src="ghtracker-logo-dark.svg" alt="ghtracker" width="310" height="82">
+      <img class="logo-light" src="ghtracker-logo-light.svg" alt="" width="310" height="82">
+    </a>
+    <div class="head-actions">
+      <a href="https://github.com/lukaszraczylo/ghtracker">GitHub</a>
+      <button type="button" class="icon-btn" id="theme-toggle" hidden aria-label="Switch colour theme">Theme</button>
+    </div>
+    <nav class="primary-nav" aria-label="Sections">
+      <a href="#interface">Dashboard</a>
+      <a href="#features">Features</a>
+      <a href="#alerts">Alerts</a>
+      <a href="#install">Install</a>
+      <a href="#setup">Set up</a>
+      <a href="#metrics">Metrics</a>
+      <a href="#reference">Reference</a>
+      <a href="#troubleshooting">Troubleshooting</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+<!-- hero -->
+<section class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <p class="eyebrow">GitHub repository dashboard</p>
+      <h1>See which of your GitHub repositories need attention</h1>
+      <p class="lead">ghtracker scans the repositories you list through a GitHub App. It shows only what is wrong: failing workflows, pull requests that wait too long and stale issues. One binary serves the dashboard and Prometheus metrics.</p>
+      <div class="code" data-copy><div class="code-head">Docker</div><pre tabindex="0"><code>docker run <span class="k">--rm</span> <span class="k">-p</span> 8080:8080 \
+  <span class="k">-v</span> "$PWD/config.yaml:/config/config.yaml:ro" \
+  <span class="k">-e</span> GHTRACKER_PRIVATE_KEY="$(cat app.pem)" \
+  ghcr.io/lukaszraczylo/ghtracker:latest</code></pre></div>
+      <p class="small muted">Binaries, Kubernetes and building from source: <a href="#install">Install</a>. You need a GitHub App first: <a href="#setup">Set up</a>.</p>
+      <div class="btn-row">
+        <a class="btn btn-primary" href="https://github.com/lukaszraczylo/ghtracker">View on GitHub</a>
+        <a class="btn btn-secondary" href="#reference">Documentation</a>
+      </div>
+      <dl class="facts">
+        <div><dt>Licence</dt><dd>MIT</dd></div>
+        <div><dt>Language</dt><dd>Go and Vue</dd></div>
+        <div><dt>Platforms</dt><dd>Linux, macOS, Windows</dd></div>
+        <div><dt>Container image</dt><dd>amd64, arm64</dd></div>
+      </dl>
+    </div>
+    <div>
+      <figure class="shot">
+      <picture>
+        <source srcset="ghtracker-hero-light.png" media="(prefers-color-scheme: light)">
+        <img src="ghtracker-hero-dark.png" width="760" height="860" alt="ghtracker dashboard: 10 critical alerts and 1 warning across 20 projects, a health strip with one segment per project, and failing workflows and pull requests grouped by repository">
+      </picture>
+      </figure>
+      <p class="small muted">Example data: 20 public repositories of the author, scanned in October 2026.</p>
+    </div>
+  </div>
+</section>
+
+<!-- dashboard -->
+<section class="section" id="interface" aria-labelledby="interface-h">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Dashboard</p>
+      <h2 id="interface-h">Healthy repositories stay out of the way</h2>
+      <p>A long list of green items hides the red ones. ghtracker lists only items that need attention, grouped by repository, and keeps one line per repository in a side panel for everything else.</p>
+    </div>
+    <figure class="shot">
+      <picture>
+        <source srcset="ghtracker-screenshot-light.png" media="(prefers-color-scheme: light)">
+        <img src="ghtracker-screenshot-dark.png" width="1440" height="1180" alt="ghtracker dashboard: 10 critical alerts and 1 warning across 20 projects, a health strip with one segment per project, and failing workflows and pull requests grouped by repository" loading="lazy">
+      </picture>
+      <figcaption>The same page at desktop width, with 20 public repositories of the author.</figcaption>
+    </figure>
+    <ol class="steps" style="margin-top:2rem">
+      <li><strong>Headline.</strong> The count of critical items and warnings, and how many projects they come from.</li>
+      <li><strong>Health strip.</strong> One segment per project, red, amber or green. Select a segment to focus that project. Segments that do not match the current search or filters dim.</li>
+      <li><strong>Five figures.</strong> Workflows failing, pull requests waiting, pull requests with failing checks, stale issues and data problems.</li>
+      <li><strong>Needs attention.</strong> One block per repository with its latest release. Each row links to the workflow run, pull request or issue, and shows its age. A meter beside a waiting pull request fills towards the critical age.</li>
+      <li><strong>Projects.</strong> Every project with its latest release and age, and counts of workflows, pull requests and issues, each linked to GitHub.</li>
+    </ol>
+    <p class="muted">The page uses the full width, works on phones and follows the colour scheme of the system. While the first scan runs it shows how many repositories are done.</p>
+  </div>
+</section>
+
+<!-- features -->
+<section class="section" id="features" aria-labelledby="features-h">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Features</p>
+      <h2 id="features-h">What ghtracker does</h2>
+      <p>Every snippet below comes from the repository: the source, <code>config.example.yaml</code> or the Kubernetes example.</p>
+    </div>
+
+    <article class="feature">
+      <div class="text">
+        <p class="tag">Workflows</p>
+        <h3>Failing workflows, including background ones</h3>
+        <p>For every active workflow ghtracker takes the newest run on the default branch. A failed run is critical. Scheduled, dynamic and manually started workflows carry a <code>background</code> mark, because nobody is watching them run.</p>
+        <p>Pull request runs appear as checks on the pull request instead. A workflow that has not run for 30 days is muted, so an old failure does not raise an alert for ever.</p>
+      </div>
+      <div class="demo">
+        <div class="code"><div class="code-head">Example rows</div><pre tabindex="0"><code><span class="k">critical</span>  lukaszraczylo/git-velocity
+Git Velocity Analysis (background)
+failure on main (schedule)             4d
+
+<span class="k">critical</span>  lukaszraczylo/gohoarder
+Release
+failure on main (push)                29h</code></pre></div>
+      </div>
+    </article>
+
+    <article class="feature rev">
+      <div class="text">
+        <p class="tag">Pull requests</p>
+        <h3>Pull requests that wait too long</h3>
+        <p>A non-draft pull request is a warning after 48 hours and critical after 7 days. Drafts are ignored. A pull request with failing checks is a warning, and its check names appear in the row.</p>
+        <p>Set the limits with <code>thresholds</code>. A negative value turns a check off.</p>
+      </div>
+      <div class="demo">
+        <div class="code" data-copy><div class="code-head">config.yaml</div><pre tabindex="0"><code><span class="k">thresholds</span>:
+  pr_warn_after: 48h
+  pr_crit_after: 168h
+  issue_stale_after: 720h
+  workflow_stuck_after: 6h
+  workflow_dormant_after: 720h</code></pre></div>
+      </div>
+    </article>
+
+    <article class="feature">
+      <div class="text">
+        <p class="tag">Search and filters</p>
+        <h3>Search, and filters that show their own counts</h3>
+        <p>Type to match projects, versions, titles and details. Every word must match. Press <kbd>/</kbd> to jump to the search box and <kbd>Esc</kbd> to clear it.</p>
+        <p>Filter by severity, kind (workflows, pull requests, issues, data) and owner. Each chip shows how many items it would leave given the other filters, and a chip that would match nothing is disabled. The address holds the filters, so you can share a view.</p>
+      </div>
+      <div class="demo">
+        <div class="code" data-copy><div class="code-head">Address of a filtered view</div><pre tabindex="0"><code>https://ghtracker.example.com/?q=bump&amp;kind=pr&amp;owner=lukaszraczylo&amp;sev=crit</code></pre></div>
+        <p class="caption">Search for "bump", pull requests only, one owner, critical only.</p>
+      </div>
+    </article>
+
+    <article class="feature rev">
+      <div class="text">
+        <p class="tag">Releases</p>
+        <h3>Latest release of every project, one click away</h3>
+        <p>Each project shows its newest GitHub release with a link and its age. A project without a release shows its newest tag. The same data is available as the metric <code>ghtracker_release_info</code>.</p>
+      </div>
+      <div class="demo">
+        <div class="code"><div class="code-head">Example series</div><pre tabindex="0"><code>ghtracker_release_info{<span class="k">repo</span>="lukaszraczylo/kportal",
+  <span class="k">version</span>="v0.11.2",
+  <span class="k">url</span>="https://github.com/lukaszraczylo/kportal/releases/tag/v0.11.2"} 1
+ghtracker_release_published_timestamp_seconds{<span class="k">repo</span>="lukaszraczylo/kportal"} 1.790906487e+09</code></pre></div>
+      </div>
+    </article>
+
+    <article class="feature">
+      <div class="text">
+        <p class="tag">Metrics</p>
+        <h3>Prometheus metrics for alerting</h3>
+        <p>Metrics are computed when you scrape, so a pull request age keeps growing between scans. Per-repository gauges cover health, open pull requests and issues, workflow state and the age of the oldest pull request.</p>
+        <p>The Kubernetes example ships alert rules for failing workflows, pull requests waiting over 3 days, repositories that fail to scan, stale scans and a low GitHub API budget.</p>
+      </div>
+      <div class="demo">
+        <div class="code" data-copy><div class="code-head">Prometheus rules</div><pre tabindex="0"><code>- alert: GhtrackerWorkflowFailing
+  expr: ghtracker_workflow_failing == 1
+  for: 10m
+- alert: GhtrackerPRWaiting
+  expr: ghtracker_pr_age_seconds &gt; 3 * 86400
+- alert: GhtrackerStale
+  expr: time() - ghtracker_last_refresh_timestamp_seconds &gt; 13 * 3600</code></pre></div>
+      </div>
+    </article>
+
+    <article class="feature rev">
+      <div class="text">
+        <p class="tag">GitHub API</p>
+        <h3>Careful with your rate limit</h3>
+        <ul>
+          <li>Conditional requests with <code>ETag</code>. A <code>304</code> reply does not count against the primary limit.</li>
+          <li>Requests stop while fewer than 100 remain, until the window resets.</li>
+          <li>On a primary or secondary limit response ghtracker waits for <code>Retry-After</code> or the reset time, stops the scan and keeps the last good data.</li>
+          <li>Two repositories at a time by default. Pagination stops at <code>max_items</code>.</li>
+        </ul>
+      </div>
+      <div class="demo">
+        <div class="code"><div class="code-head">Cost of one scan</div><pre tabindex="0"><code>requests per scan =
+  6 per repository
++ 2 per open pull request
++ 1 per active workflow
+
+63 repositories take about 100 seconds
+and a few hundred requests</code></pre></div>
+        <p class="caption">Measured on 63 repositories with the default settings. The installation limit of a GitHub App is at least 5,000 requests per hour.</p>
+      </div>
+    </article>
+
+    <article class="feature">
+      <div class="text">
+        <p class="tag">Accuracy</p>
+        <h3>A failure is confirmed before it alerts</h3>
+        <p>GitHub sometimes answers a workflow run listing from a lagging replica. One answer held 135 runs ending three weeks ago while the current listing held 414. A client that reuses its connection can keep hitting that replica.</p>
+        <p>ghtracker asks again on a new connection, without its response cache, for every failing workflow. It keeps the union of both answers, so the newest run decides.</p>
+      </div>
+      <div class="demo">
+        <div class="code"><div class="code-head">Example from a real repository</div><pre tabindex="0"><code>stale answer     runs: 135   newest: 09-11  failure
+current answer   runs: 414   newest: 10-02  success
+
+shown after the check:  success</code></pre></div>
+      </div>
+    </article>
+
+    <article class="feature rev">
+      <div class="text">
+        <p class="tag">On demand</p>
+        <h3>Rescan with one button</h3>
+        <p>The <strong>Rescan repositories</strong> button starts a new scan and follows it, so the new data appears as soon as the scan ends. One rescan every 5 minutes is allowed, and the server refuses requests that come from other sites. Set <code>manual_refresh: false</code> to turn the button off.</p>
+      </div>
+      <div class="demo">
+        <div class="code" data-copy><div class="code-head">Same thing from a shell</div><pre tabindex="0"><code>curl -X POST http://localhost:8080/refresh</code></pre></div>
+        <p class="caption">Answers <code>202</code>. A second call within 5 minutes answers <code>429</code>.</p>
+      </div>
+    </article>
+
+    <article class="feature">
+      <div class="text">
+        <p class="tag">One binary</p>
+        <h3>The dashboard is inside the binary</h3>
+        <p>The Vue app is built into the Go binary, so there is nothing else to host. The container image is a static binary on a distroless base that runs as a non-root user. Release checksums and image manifests are signed with cosign.</p>
+      </div>
+      <div class="demo">
+        <div class="code" data-copy><div class="code-head">Command line</div><pre tabindex="0"><code>ghtracker -version
+ghtracker -config config.yaml</code></pre></div>
+      </div>
+    </article>
+
+    <article class="feature rev">
+      <div class="text">
+        <p class="tag">Kubernetes</p>
+        <h3>Example manifests for a cluster</h3>
+        <p>The repository has a Kustomize base with a Deployment, a Service, a ConfigMap, an External Secrets resource for the private key, a Traefik route, a ServiceMonitor and a PrometheusRule. Keep one replica, because each replica scans GitHub on its own.</p>
+      </div>
+      <div class="demo">
+        <div class="code" data-copy><div class="code-head">Review before you apply</div><pre tabindex="0"><code>kustomize build deploy/kubernetes | kubectl diff -f -</code></pre></div>
+        <p class="caption">The dashboard has no login of its own. Put it behind your ingress authentication.</p>
+      </div>
+    </article>
+  </div>
+</section>
+
+<!-- alerts -->
+<section class="section" id="alerts" aria-labelledby="alerts-h">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Alerts</p>
+      <h2 id="alerts-h">How ghtracker decides what is wrong</h2>
+      <p>Alerts are evaluated every time you read the page or scrape the metrics, so ages keep advancing between scans. Draft pull requests and archived repositories raise no work alerts.</p>
+    </div>
+    <div class="tablewrap wrap-cells">
+      <table>
+        <thead><tr><th scope="col">Condition</th><th scope="col">Severity</th><th scope="col">Setting</th></tr></thead>
+        <tbody>
+          <tr><td>The newest completed default-branch run of a workflow failed</td><td><span class="sev-crit">critical</span></td><td><code>thresholds.workflow_dormant_after</code> mutes workflows idle longer than this</td></tr>
+          <tr><td>A scan of a repository failed. The dashboard keeps the last good data.</td><td><span class="sev-crit">critical</span></td><td></td></tr>
+          <tr><td>A non-draft pull request is older than the critical age</td><td><span class="sev-crit">critical</span></td><td><code>thresholds.pr_crit_after</code>, default 168h</td></tr>
+          <tr><td>A non-draft pull request is older than the warning age</td><td><span class="sev-warn">warning</span></td><td><code>thresholds.pr_warn_after</code>, default 48h</td></tr>
+          <tr><td>The checks of a pull request fail</td><td><span class="sev-warn">warning</span></td><td></td></tr>
+          <tr><td>A workflow is queued or running for too long</td><td><span class="sev-warn">warning</span></td><td><code>thresholds.workflow_stuck_after</code>, default 6h</td></tr>
+          <tr><td>Open issues without activity. One alert for each repository.</td><td><span class="sev-warn">warning</span></td><td><code>thresholds.issue_stale_after</code>, default 720h</td></tr>
+          <tr><td>A section failed to load, for example a missing App permission</td><td><span class="sev-warn">warning</span></td><td></td></tr>
+          <tr><td>The data of a repository is older than expected</td><td><span class="sev-warn">warning</span></td><td><code>thresholds.data_stale_after</code>, default twice the interval plus 30 minutes</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted small">Durations use Go syntax such as <code>48h</code>. There is no <code>d</code> unit.</p>
+  </div>
+</section>
+
+<!-- install -->
+<section class="section" id="install" aria-labelledby="install-h">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Install</p>
+      <h2 id="install-h">Install ghtracker</h2>
+      <p>Pick one method. Release archives cover Linux, macOS and Windows on amd64 and arm64.</p>
+    </div>
+
+    <div data-tabs>
+      <div class="tabpanel" id="tab-docker" data-tab-title="Docker">
+        <h3>Docker</h3>
+        <div class="code" data-copy><pre tabindex="0"><code>docker run <span class="k">--rm</span> <span class="k">-p</span> 8080:8080 \
+  <span class="k">-v</span> "$PWD/config.yaml:/config/config.yaml:ro" \
+  <span class="k">-e</span> GHTRACKER_PRIVATE_KEY="$(cat app.pem)" \
+  ghcr.io/lukaszraczylo/ghtracker:latest</code></pre></div>
+        <p>The config must set <code>listen: ":8080"</code> so the port is reachable from outside the container. Tags are the release version, for example <code>0.2.3</code>, and <code>latest</code>.</p>
+      </div>
+
+      <div class="tabpanel" id="tab-binary" data-tab-title="Binary">
+        <h3>Release archive</h3>
+        <p>The <a href="https://github.com/lukaszraczylo/ghtracker/releases">releases page</a> has one archive per platform, named <code>ghtracker-&lt;os&gt;-&lt;arch&gt;.tar.gz</code> (<code>.zip</code> on Windows). Each holds the binary, the licence, the README and <code>config.example.yaml</code>.</p>
+        <div class="code" data-copy><pre tabindex="0"><code>tar -xzf ghtracker-linux-amd64.tar.gz
+./ghtracker -config config.yaml</code></pre></div>
+      </div>
+
+      <div class="tabpanel" id="tab-k8s" data-tab-title="Kubernetes">
+        <h3>Kubernetes</h3>
+        <p>Copy <code>deploy/kubernetes/</code> from the repository, set your App ID, repositories, secret store and host, then review the result before you apply it.</p>
+        <div class="code" data-copy><pre tabindex="0"><code>git clone https://github.com/lukaszraczylo/ghtracker.git
+kustomize build ghtracker/deploy/kubernetes | kubectl diff -f -</code></pre></div>
+        <p>If your cluster uses GitOps, commit the manifests and let your controller apply them.</p>
+      </div>
+
+      <div class="tabpanel" id="tab-source" data-tab-title="Build from source">
+        <h3>Build from source</h3>
+        <div class="code" data-copy><pre tabindex="0"><code>git clone https://github.com/lukaszraczylo/ghtracker.git
+cd ghtracker
+make build</code></pre></div>
+        <p>The build needs Go 1.25 or later, Node 22.13 or later and pnpm 11. <code>make build</code> installs the UI packages, builds the UI into <code>dist/</code> and then builds the Go binary, which embeds <code>dist/</code>. Without the UI build the server answers <code>503</code> at <code>/</code>.</p>
+      </div>
+
+      <div class="tabpanel" id="tab-verify" data-tab-title="Verify signatures">
+        <h3>Verify a release signature</h3>
+        <p>Release checksums are signed with <a href="https://github.com/sigstore/cosign">cosign</a> using keyless signing. Download the checksums file and its sigstore bundle from the release, then run:</p>
+        <div class="code" data-copy><pre tabindex="0"><code>cosign verify-blob \
+  <span class="k">--certificate-identity-regexp</span> "^https://github\.com/lukaszraczylo/shared-actions/\.github/workflows/go-release\.yaml@refs/heads/main$" \
+  <span class="k">--certificate-oidc-issuer</span> "https://token.actions.githubusercontent.com" \
+  <span class="k">--bundle</span> ghtracker-checksums.txt.sigstore.json \
+  ghtracker-checksums.txt</code></pre></div>
+        <p>Then check the archive against the verified checksums file with <code>shasum -a 256</code> or <code>sha256sum</code>.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- set up -->
+<section class="section" id="setup" aria-labelledby="setup-h">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Set up</p>
+      <h2 id="setup-h">From install to the first dashboard</h2>
+      <p>ghtracker signs in as a GitHub App. An App can only read what you grant it and you can install it on a user account or an organisation.</p>
+    </div>
+    <ol class="steps">
+      <li>Create a GitHub App with <strong>read-only</strong> repository permissions: Metadata, Contents, Issues, Pull requests, Actions, Checks and Commit statuses. It needs no webhook and no write access.</li>
+      <li>Install the App on every account or organisation whose repositories you list. Choose all repositories, or select the ones you want.</li>
+      <li>Generate a private key for the App and keep the <code>.pem</code> file safe.</li>
+      <li>Copy <code>config.example.yaml</code> to <code>config.yaml</code>, set <code>github.app_id</code> and list your repositories.</li>
+      <li>Give ghtracker the key through <code>github.private_key_file</code> or the environment variable <code>GHTRACKER_PRIVATE_KEY</code>, then start it and open <code>http://localhost:8080</code>.</li>
+    </ol>
+    <div class="code" data-copy><div class="code-head">config.yaml</div><pre tabindex="0"><code><span class="k">listen</span>: ":8080"
+<span class="k">refresh_interval</span>: 6h
+<span class="k">github</span>:
+  <span class="k">app_id</span>: 123456
+  <span class="k">private_key_file</span>: /secrets/ghtracker.pem
+  <span class="k">installation_id</span>: 0        <span class="c"># 0 = find the installation for each repository</span>
+<span class="k">repos</span>:
+  - lukaszraczylo/kubemirror
+  - lukaszraczylo/semver-generator</code></pre></div>
+    <div class="note">
+      <p><strong>Public and private repositories.</strong> GitHub lets any installation read public data, so public repositories work even with fewer permissions. Private repositories need every permission above, and each installation must accept the update after you add one.</p>
+    </div>
+  </div>
+</section>
+
+<!-- metrics -->
+<section class="section" id="metrics" aria-labelledby="metrics-h">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Metrics</p>
+      <h2 id="metrics-h">Prometheus metrics</h2>
+      <p>All metrics use the <code>ghtracker_</code> prefix and are computed at scrape time. A scrape interval of one minute is enough. Reading the metrics costs no GitHub requests.</p>
+    </div>
+    <div class="tablewrap wrap-cells">
+      <table>
+        <thead><tr><th scope="col">Metric</th><th scope="col">Labels</th><th scope="col">Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>repo_up</code>, <code>repo_health</code></td><td>repo</td><td>Last scan succeeded. Worst alert: 0 ok, 1 warning, 2 critical.</td></tr>
+          <tr><td><code>repo_open_issues</code>, <code>repo_open_prs</code></td><td>repo</td><td>Open issues and open pull requests, including drafts.</td></tr>
+          <tr><td><code>repo_open_prs_failing_checks</code>, <code>repo_stale_issues</code></td><td>repo</td><td>Pull requests with failing checks. Issues without recent activity.</td></tr>
+          <tr><td><code>repo_oldest_pr_age_seconds</code></td><td>repo</td><td>Age of the oldest non-draft pull request.</td></tr>
+          <tr><td><code>pr_age_seconds</code>, <code>pr_checks_failing</code></td><td>repo, number</td><td>One series per non-draft pull request.</td></tr>
+          <tr><td><code>workflow_failing</code>, <code>workflow_running</code></td><td>repo, workflow, background</td><td>The newest completed run failed. A run is in progress.</td></tr>
+          <tr><td><code>workflow_last_run_timestamp_seconds</code></td><td>repo, workflow, background</td><td>When the newest default-branch run started.</td></tr>
+          <tr><td><code>release_info</code></td><td>repo, version, url</td><td>Latest release or tag. The value is always 1.</td></tr>
+          <tr><td><code>release_published_timestamp_seconds</code></td><td>repo</td><td>When the latest release was published.</td></tr>
+          <tr><td><code>alerts</code></td><td>severity</td><td>Active alerts of each severity.</td></tr>
+          <tr><td><code>refreshes_total</code>, <code>repo_refresh_errors_total</code></td><td></td><td>Completed scans. Scan failures of single repositories.</td></tr>
+          <tr><td><code>last_refresh_timestamp_seconds</code>, <code>last_refresh_duration_seconds</code></td><td></td><td>When the last scan started and how long it took.</td></tr>
+          <tr><td><code>github_rate_limit_remaining</code></td><td></td><td>Requests left in the current GitHub window.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- reference -->
+<section class="section" id="reference" aria-labelledby="reference-h">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Reference</p>
+      <h2 id="reference-h">Reference</h2>
+    </div>
+
+    <h3 id="cli">Command line and environment</h3>
+    <div class="tablewrap wrap-cells">
+      <table>
+        <thead><tr><th scope="col">Name</th><th scope="col">Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>-config &lt;path&gt;</code></td><td>Path of the YAML config file. Default <code>config.yaml</code>.</td></tr>
+          <tr><td><code>-version</code></td><td>Print the version and exit.</td></tr>
+          <tr><td><code>GHTRACKER_PRIVATE_KEY</code></td><td>The App private key as PEM text. It takes precedence over <code>github.private_key_file</code>.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 id="config-ref" style="margin-top:2.5rem">Configuration keys</h3>
+    <div class="tablewrap wrap-cells">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>listen</code></td><td><code>:8080</code></td><td>Address of the HTTP server.</td></tr>
+          <tr><td><code>refresh_interval</code></td><td><code>6h</code></td><td>Time between scans. The minimum is <code>1m</code>.</td></tr>
+          <tr><td><code>manual_refresh</code></td><td><code>true</code></td><td>The rescan button and <code>POST /refresh</code>.</td></tr>
+          <tr><td><code>github.app_id</code></td><td></td><td>Required. The numeric ID of the GitHub App.</td></tr>
+          <tr><td><code>github.private_key_file</code></td><td></td><td>Path of the private key. Required unless <code>GHTRACKER_PRIVATE_KEY</code> is set.</td></tr>
+          <tr><td><code>github.installation_id</code></td><td><code>0</code></td><td>Use one installation for every repository, or <code>0</code> to find the installation of each repository.</td></tr>
+          <tr><td><code>github.api_url</code></td><td><code>https://api.github.com</code></td><td>API address. GitHub Enterprise Server has not been tested.</td></tr>
+          <tr><td><code>thresholds.*</code></td><td>see <a href="#alerts">Alerts</a></td><td>Ages and durations that raise alerts. A negative value disables a check.</td></tr>
+          <tr><td><code>max_items</code></td><td><code>100</code></td><td>Most issues and pull requests read for each repository.</td></tr>
+          <tr><td><code>concurrency</code></td><td><code>2</code></td><td>Repositories scanned at the same time.</td></tr>
+          <tr><td><code>repos</code></td><td></td><td>Required. A list of <code>owner/name</code>.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 id="endpoints" style="margin-top:2.5rem">HTTP endpoints</h3>
+    <div class="tablewrap wrap-cells">
+      <table>
+        <thead><tr><th scope="col">Path</th><th scope="col">Answer</th></tr></thead>
+        <tbody>
+          <tr><td><code>/</code></td><td>The dashboard.</td></tr>
+          <tr><td><code>/api/state</code></td><td>The state as JSON: repositories, alerts, thresholds and scan progress.</td></tr>
+          <tr><td><code>/healthz</code></td><td><code>200</code> after the first scan finished, <code>503</code> before.</td></tr>
+          <tr><td><code>/metrics</code></td><td>Prometheus metrics.</td></tr>
+          <tr><td><code>POST /refresh</code></td><td>Starts a scan. Allowed once every 5 minutes. Same-site requests only.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted small">The dashboard keeps its data in memory. After a restart it scans again, and the page shows the progress.</p>
+  </div>
+</section>
+
+<!-- troubleshooting -->
+<section class="section" id="troubleshooting" aria-labelledby="trouble-h">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Troubleshooting</p>
+      <h2 id="trouble-h">Common failures</h2>
+    </div>
+    <div class="two">
+      <div>
+        <h3>HTTP 403: Resource not accessible by integration</h3>
+        <p>The row says <strong>Incomplete data</strong> for a private repository. The App lacks a permission. Grant read access to Issues, Actions, Checks and Commit statuses as well as the others in <a href="#setup">Set up</a>, then accept the update on every installation. Restart ghtracker, because installation tokens last an hour.</p>
+        <h3 style="margin-top:2rem">github rate limit reached</h3>
+        <p>ghtracker stopped the scan on purpose and keeps the last good data. It tries again at the next scan. Lower the number of repositories, raise <code>refresh_interval</code> or lower <code>concurrency</code>. The metric <code>ghtracker_github_rate_limit_remaining</code> shows the budget.</p>
+      </div>
+      <div>
+        <h3>The page says "Scanning repositories" for a long time</h3>
+        <p>The first scan has to read every repository. Sixty repositories take about two minutes. The page shows how many are done and the container is ready before the scan ends.</p>
+        <h3 style="margin-top:2rem">UI is not built</h3>
+        <p>The server answers <code>503</code> at <code>/</code> when you built the binary without the UI. Run <code>make build</code>, or <code>pnpm build</code> before <code>go build</code>.</p>
+        <h3 style="margin-top:2rem">Config errors at start</h3>
+        <p>ghtracker names the problem and exits, for example <code>repos must list at least one owner/name</code>, <code>github.app_id is required</code> or <code>refresh_interval 30s is below the 1m0s minimum</code>.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- faq -->
+<section class="section" id="faq" aria-labelledby="faq-h">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">FAQ</p>
+      <h2 id="faq-h">Questions and answers</h2>
+    </div>
+    <details><summary>Does ghtracker change anything on GitHub?</summary><p>No. The client sends only <code>GET</code> requests, apart from the request that exchanges the App key for an installation token. Give the App read-only permissions.</p></details>
+    <details><summary>Does it need webhooks?</summary><p>No. It polls on a schedule, so it works behind a firewall and needs no public address.</p></details>
+    <details><summary>Why every six hours?</summary><p>It is the default and keeps the cost of a scan low. Set <code>refresh_interval</code> down to one minute, or use the rescan button when you need fresh data.</p></details>
+    <details><summary>Can I run more than one replica?</summary><p>It is not useful. Each replica scans GitHub on its own and spends API budget, and the data lives in memory.</p></details>
+    <details><summary>Is there a login?</summary><p>No. Put the dashboard behind a reverse proxy or an identity provider.</p></details>
+    <details><summary>Which repositories can it read?</summary><p>Any repository that an installation of your App can access, public or private. A repository outside every installation fails its scan and shows as critical.</p></details>
+    <details><summary>What is the licence?</summary><p>MIT.</p></details>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <p style="color:var(--fg);font-weight:600;margin-bottom:0.5rem">ghtracker</p>
+        <p>GitHub repository dashboard and Prometheus metrics. MIT licence.</p>
+      </div>
+      <div>
+        <h2>Project</h2>
+        <ul>
+          <li><a href="https://github.com/lukaszraczylo/ghtracker">GitHub</a></li>
+          <li><a href="https://github.com/lukaszraczylo/ghtracker/releases">Releases</a></li>
+          <li><a href="https://github.com/lukaszraczylo/ghtracker/issues">Issues</a></li>
+          <li><a href="https://github.com/lukaszraczylo/ghtracker/pkgs/container/ghtracker">Container image</a></li>
+        </ul>
+      </div>
+      <div>
+        <h2>Docs</h2>
+        <ul>
+          <li><a href="#setup">Set up</a></li>
+          <li><a href="#alerts">Alerts</a></li>
+          <li><a href="#reference">Reference</a></li>
+          <li><a href="#troubleshooting">Troubleshooting</a></li>
+        </ul>
+      </div>
+      <div>
+        <h2>Legal</h2>
+        <ul>
+          <li><a href="https://github.com/lukaszraczylo/ghtracker/blob/main/LICENSE">MIT licence</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <p>Made by Lukasz Raczylo. Built with <a href="https://go.dev">Go</a>, <a href="https://vuejs.org">Vue</a> and the <a href="https://prometheus.io">Prometheus</a> client library.</p>
+    </div>
+  </div>
+</footer>
+<script>
+(function () {
+  var root = document.documentElement;
+
+  // Theme toggle
+  var tbtn = document.getElementById("theme-toggle");
+  if (tbtn) {
+    tbtn.hidden = false;
+    var current = function () {
+      var t = root.getAttribute("data-theme");
+      if (t) return t;
+      return window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    };
+    var label = function () { tbtn.textContent = current() === "dark" ? "Light theme" : "Dark theme"; };
+    label();
+    tbtn.addEventListener("click", function () {
+      var next = current() === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      try { localStorage.setItem("ghtracker-theme", next); } catch (e) {}
+      label();
+    });
+  }
+
+  // Copy buttons
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+    return new Promise(function (resolve, reject) {
+      var ta = document.createElement("textarea");
+      ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy") ? resolve() : reject(); } catch (e) { reject(e); } finally { document.body.removeChild(ta); }
+    });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll(".code[data-copy]"), function (box) {
+    var code = box.querySelector("pre code");
+    if (!code) return;
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "copy"; b.textContent = "Copy";
+    b.setAttribute("aria-label", "Copy code to clipboard");
+    b.addEventListener("click", function () {
+      copyText(code.textContent).then(function () {
+        b.textContent = "Copied"; b.classList.add("done");
+        setTimeout(function () { b.textContent = "Copy"; b.classList.remove("done"); }, 1600);
+      }, function () { b.textContent = "Press Ctrl+C"; setTimeout(function () { b.textContent = "Copy"; }, 1600); });
+    });
+    box.appendChild(b);
+  });
+
+  // Install tabs
+  Array.prototype.forEach.call(document.querySelectorAll("[data-tabs]"), function (group) {
+    var panels = Array.prototype.slice.call(group.querySelectorAll(".tabpanel"));
+    if (!panels.length) return;
+    var list = document.createElement("div");
+    list.className = "tablist"; list.setAttribute("role", "tablist"); list.setAttribute("aria-label", "Install methods");
+    var tabs = panels.map(function (p, i) {
+      var t = document.createElement("button");
+      t.type = "button"; t.setAttribute("role", "tab"); t.id = "t-" + p.id;
+      t.setAttribute("aria-controls", p.id); t.textContent = p.getAttribute("data-tab-title");
+      p.setAttribute("role", "tabpanel"); p.setAttribute("aria-labelledby", t.id);
+      t.addEventListener("click", function () { select(i, true); });
+      t.addEventListener("keydown", function (e) {
+        var n = null;
+        if (e.key === "ArrowRight") n = (i + 1) % tabs.length;
+        else if (e.key === "ArrowLeft") n = (i - 1 + tabs.length) % tabs.length;
+        else if (e.key === "Home") n = 0;
+        else if (e.key === "End") n = tabs.length - 1;
+        if (n !== null) { e.preventDefault(); select(n, true); }
+      });
+      list.appendChild(t);
+      return t;
+    });
+    function select(idx, focus) {
+      tabs.forEach(function (t, i) {
+        var on = i === idx;
+        t.setAttribute("aria-selected", on ? "true" : "false");
+        t.tabIndex = on ? 0 : -1;
+        panels[i].hidden = !on;
+      });
+      if (focus) tabs[idx].focus();
+    }
+    group.insertBefore(list, group.firstChild);
+    var start = 0;
+    var h = location.hash.replace("#", "");
+    panels.forEach(function (p, i) { if (p.id === h) start = i; });
+    select(start, false);
+  });
+})();
+</script>
+</body>
+</html>
