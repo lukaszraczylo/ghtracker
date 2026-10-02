@@ -19,7 +19,9 @@ const SCAN_TIMEOUT_MS = 10 * 60 * 1000
 
 const SEVERITY_RANK = { ok: 0, warn: 1, crit: 2 } as const
 
-/** Groups alerts into one row per target URL and one block per unhealthy repo. */
+const sinceMs = (since: string) => Date.parse(since) || 0
+
+/** Groups alerts into one row per target URL and one block per unhealthy repo, newest problem first. */
 export function buildBlocks(state: TrackerState): Block[] {
   const rows = new Map<string, Row>()
   const order = new Map<string, string[]>()
@@ -32,6 +34,7 @@ export function buildBlocks(state: TrackerState): Block[] {
       if (SEVERITY_RANK[alert.severity] > SEVERITY_RANK[existing.severity]) {
         existing.severity = alert.severity
       }
+      if (sinceMs(alert.since) > sinceMs(existing.since)) existing.since = alert.since
       continue
     }
     rows.set(key, {
@@ -52,7 +55,8 @@ export function buildBlocks(state: TrackerState): Block[] {
     list.sort((a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity])
     blocks.push({ repo, rows: list })
   }
-  return blocks
+  const newest = (b: Block) => Math.max(...b.rows.map((r) => sinceMs(r.since)))
+  return blocks.sort((a, b) => newest(b) - newest(a))
 }
 
 export interface RepoCounts {

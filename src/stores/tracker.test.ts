@@ -44,16 +44,67 @@ describe('buildBlocks', () => {
     expect(buildBlocks(s)[0].rows.map((r) => r.subject)).toEqual(['crit row', 'warn row'])
   })
 
-  it('keeps the repo order from the server and ignores alerts for unknown repos', () => {
+  it('keeps the server order for equal ages and ignores alerts for unknown repos', () => {
+    const since = '2026-10-01T00:00:00Z'
     const s = state({
       repos: [repo({ fullName: 'o/b' }), repo({ fullName: 'o/a' })],
       alerts: [
-        alert({ repo: 'o/a', url: '1' }),
-        alert({ repo: 'o/b', url: '2' }),
-        alert({ repo: 'o/ghost', url: '3' }),
+        alert({ repo: 'o/a', url: '1', since }),
+        alert({ repo: 'o/b', url: '2', since }),
+        alert({ repo: 'o/ghost', url: '3', since }),
       ],
     })
     expect(buildBlocks(s).map((b) => b.repo.fullName)).toEqual(['o/b', 'o/a'])
+  })
+
+  it('puts the repo with the newest problem first, whatever its kind or severity', () => {
+    const s = state({
+      repos: [
+        repo({ fullName: 'o/old-crit', health: 'crit' }),
+        repo({ fullName: 'o/new-warn', health: 'warn' }),
+        repo({ fullName: 'o/mid', health: 'crit' }),
+      ],
+      alerts: [
+        alert({
+          repo: 'o/old-crit',
+          url: 'a',
+          severity: 'crit',
+          kind: 'pr_waiting',
+          since: '2026-05-19T00:00:00Z',
+        }),
+        alert({
+          repo: 'o/new-warn',
+          url: 'b',
+          severity: 'warn',
+          kind: 'workflow_stuck',
+          since: '2026-10-02T12:00:00Z',
+        }),
+        alert({
+          repo: 'o/mid',
+          url: 'c',
+          severity: 'crit',
+          kind: 'workflow_failed',
+          since: '2026-09-20T00:00:00Z',
+        }),
+      ],
+    })
+    expect(buildBlocks(s).map((b) => b.repo.fullName)).toEqual([
+      'o/new-warn',
+      'o/mid',
+      'o/old-crit',
+    ])
+  })
+
+  it('ranks a repo by its newest alert, not its oldest', () => {
+    const s = state({
+      repos: [repo({ fullName: 'o/a', health: 'crit' }), repo({ fullName: 'o/b', health: 'crit' })],
+      alerts: [
+        alert({ repo: 'o/a', url: 'a1', since: '2026-01-01T00:00:00Z' }),
+        alert({ repo: 'o/a', url: 'a2', since: '2026-10-02T00:00:00Z' }),
+        alert({ repo: 'o/b', url: 'b1', since: '2026-06-01T00:00:00Z' }),
+      ],
+    })
+    expect(buildBlocks(s).map((b) => b.repo.fullName)).toEqual(['o/a', 'o/b'])
   })
 
   it('returns no blocks when everything is healthy', () => {

@@ -14,7 +14,7 @@ Release archives and the image checksums are signed with cosign.
 
 ## What it shows
 
-The dashboard lists only what needs attention, grouped by project:
+The dashboard lists only what needs attention, grouped by project. The project with the newest problem comes first:
 
 - Failing workflows, including scheduled and other background ones, with a link to the run.
 - Pull requests that wait too long or fail their checks, with links and age.
