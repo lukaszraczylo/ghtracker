@@ -4,6 +4,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -160,4 +161,25 @@ func normalizeRepos(in []string) ([]string, error) {
 		out = append(out, r)
 	}
 	return out, nil
+}
+
+const (
+	defaultWebURL = "https://github.com"
+	apiV3Suffix   = "/api/v3"
+	apiHostPrefix = "api."
+)
+
+// WebBase returns the address of the web interface that belongs to a GitHub API address:
+// github.com for the public API, the host without /api/v3 for Enterprise Server, and the host
+// without its "api." prefix for Enterprise Cloud with data residency.
+func WebBase(apiURL string) string {
+	u, err := url.Parse(strings.TrimRight(apiURL, "/"))
+	if err != nil || u.Host == "" || strings.EqualFold(u.Host, "api.github.com") {
+		return defaultWebURL
+	}
+	u.Path = strings.TrimSuffix(u.Path, apiV3Suffix)
+	if u.Path == "" {
+		u.Host = strings.TrimPrefix(u.Host, apiHostPrefix)
+	}
+	return strings.TrimRight(u.String(), "/")
 }

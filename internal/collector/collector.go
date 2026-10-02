@@ -54,6 +54,7 @@ type Collector struct {
 	repos       map[string]model.Repo
 	now         func() time.Time
 	log         *slog.Logger
+	webBase     string
 	kick        chan struct{}
 	names       []string
 	th          config.Thresholds
@@ -78,6 +79,7 @@ func New(f Fetcher, cfg *config.Config, log *slog.Logger) *Collector {
 		interval:    cfg.RefreshInterval,
 		concurrency: cfg.Concurrency,
 		now:         time.Now,
+		webBase:     config.WebBase(cfg.GitHub.APIURL),
 		log:         log,
 		kick:        make(chan struct{}, 1),
 		repos:       make(map[string]model.Repo, len(cfg.Repos)),
@@ -174,7 +176,7 @@ func (c *Collector) refreshOne(ctx context.Context, name string, at time.Time) m
 	prev, ok := c.repos[name]
 	c.mu.RUnlock()
 	if !ok {
-		prev = model.Repo{FullName: name, URL: "https://github.com/" + name}
+		prev = model.Repo{FullName: name, URL: c.webBase + "/" + name}
 	}
 	prev.Up, prev.Err = false, err.Error()
 	return prev

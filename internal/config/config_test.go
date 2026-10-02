@@ -126,3 +126,22 @@ func TestManualRefreshCanBeDisabled(t *testing.T) {
 		t.Fatal("explicit false must stay off")
 	}
 }
+
+func TestWebBase(t *testing.T) {
+	tests := map[string]string{
+		"":                                      "https://github.com",
+		"https://api.github.com":                "https://github.com",
+		"https://api.github.com/":               "https://github.com",
+		"https://ghe.example.com/api/v3":        "https://ghe.example.com",
+		"https://ghe.example.com/api/v3/":       "https://ghe.example.com",
+		"http://ghe.internal:8080/api/v3":       "http://ghe.internal:8080",
+		"https://api.acme.ghe.com":              "https://acme.ghe.com",
+		"https://github.example.com/sub/api/v3": "https://github.example.com/sub",
+		"not a url":                             "https://github.com",
+	}
+	for in, want := range tests {
+		if got := WebBase(in); got != want {
+			t.Errorf("WebBase(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

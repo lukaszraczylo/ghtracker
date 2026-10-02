@@ -337,3 +337,17 @@ func TestScanProgressAdvancesAsReposFinish(t *testing.T) {
 		t.Fatalf("after scan: done=%d total=%d", v.ScanDone, v.ScanTotal)
 	}
 }
+
+func TestFailedFirstScanLinksToTheConfiguredHost(t *testing.T) {
+	fail := &fakeFetcher{fn: func(string) (model.Repo, error) { return model.Repo{}, errors.New("nope") }}
+	cfg := &config.Config{
+		Repos: []string{"o/a"}, RefreshInterval: time.Hour, Concurrency: 1, Thresholds: th(),
+		GitHub: config.GitHub{APIURL: "https://ghe.example.com/api/v3"},
+	}
+	c := New(fail, cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	c.now = func() time.Time { return t0 }
+	c.Refresh(context.Background())
+	if got := c.View().Repos[0].URL; got != "https://ghe.example.com/o/a" {
+		t.Fatalf("repo link = %q", got)
+	}
+}
