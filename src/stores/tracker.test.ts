@@ -219,4 +219,62 @@ describe('tracker store', () => {
     expect(store.error).toContain('HTTP 500')
     expect(store.notice).toBe('')
   })
+
+  describe('refreshRepo', () => {
+    const refreshed = (over = {}) => ({
+      ...state({ repos: [repo({ refreshedAt: '2026-10-02T12:00:00Z', ...over })] }),
+      repo: 'o/r',
+    })
+
+    it('posts the repo, swaps the state in and announces it without another fetch', async () => {
+      const calls: string[] = []
+      mockFetch((url, init) => {
+        calls.push(`${init?.method ?? 'GET'} ${url}`)
+        return json(refreshed())
+      })
+      const store = useTrackerStore()
+      const done = store.refreshRepo('o/r')
+      expect(store.refreshingRepos).toEqual(['o/r'])
+      await done
+      expect(calls).toEqual(['POST /refresh?repo=o%2Fr'])
+      expect(store.refreshingRepos).toEqual([])
+      expect(store.state?.repos[0].refreshedAt).toBe('2026-10-02T12:00:00Z')
+      expect(store.announcement).toBe('Refreshed o/r')
+      expect(store.notice).toBe('')
+    })
+
+    it('ignores a second request for the same repo while one is pending', async () => {
+      const fetchMock = mockFetch(() => json(refreshed()))
+      const store = useTrackerStore()
+      await Promise.all([store.refreshRepo('o/r'), store.refreshRepo('o/r')])
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('shows the wait from Retry-After on 429', async () => {
+      mockFetch(() => new Response('{}', { status: 429, headers: { 'Retry-After': '42' } }))
+      const store = useTrackerStore()
+      await store.refreshRepo('o/r')
+      expect(store.notice).toBe('o/r was refreshed recently. Try again in 42s')
+      expect(store.refreshingRepos).toEqual([])
+      expect(store.error).toBe('')
+    })
+
+    it('says a scan is running on 409', async () => {
+      mockFetch(() => new Response('{}', { status: 409 }))
+      const store = useTrackerStore()
+      await store.refreshRepo('o/r')
+      expect(store.notice).toContain('already running')
+    })
+
+    it('reports other failures and a repo that came back down', async () => {
+      mockFetch(() => new Response('{}', { status: 500 }))
+      const store = useTrackerStore()
+      await store.refreshRepo('o/r')
+      expect(store.notice).toContain('HTTP 500')
+      mockFetch(() => json(refreshed({ up: false, error: 'boom' })))
+      await store.refreshRepo('o/r')
+      expect(store.notice).toBe('Could not refresh o/r: boom')
+      expect(store.announcement).toBe('')
+    })
+  })
 })

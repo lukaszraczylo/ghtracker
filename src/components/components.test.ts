@@ -448,3 +448,55 @@ describe('LoadingScreen', () => {
     expect(w.attributes('aria-live')).toBe('polite')
   })
 })
+
+describe('per-repository refresh button', () => {
+  const block = buildBlocks(mixedState())[0]
+  const repos = mixedState().repos
+  const group = (extra = {}) =>
+    mount(RepoGroup, { props: { block, nowMs, critSeconds: CRIT_SECONDS, ...extra } })
+  const list = (extra = {}) =>
+    mount(ProjectList, { props: { repos, total: 2, focused: null, nowMs, ...extra } })
+
+  it('is hidden unless manual refresh is on', () => {
+    expect(group().find('[data-test=repo-refresh]').exists()).toBe(false)
+    expect(list().find('[data-test=repo-refresh]').exists()).toBe(false)
+    expect(list({ manualRefresh: false }).find('[data-test=repo-refresh]').exists()).toBe(false)
+  })
+
+  it('renders one labelled button per project and one per group header', () => {
+    const l = list({ manualRefresh: true })
+    const buttons = l.findAll('[data-test=project] [data-test=repo-refresh]')
+    expect(buttons.map((b) => b.attributes('aria-label'))).toEqual([
+      'Refresh o/r',
+      'Refresh o/fine',
+    ])
+    const g = group({ manualRefresh: true })
+    expect(g.get('header [data-test=repo-refresh]').attributes('aria-label')).toBe('Refresh o/r')
+  })
+
+  it('emits the repo name on click without selecting the project', async () => {
+    const l = list({ manualRefresh: true })
+    await l.findAll('[data-test=repo-refresh]')[1].trigger('click')
+    expect(l.emitted('refresh')).toEqual([['o/fine']])
+    expect(l.emitted('select')).toBeUndefined()
+    const g = group({ manualRefresh: true })
+    await g.get('[data-test=repo-refresh]').trigger('click')
+    expect(g.emitted('refresh')).toEqual([['o/r']])
+  })
+
+  it('disables only the refreshing repo and spins its icon', () => {
+    const l = list({ manualRefresh: true, refreshing: ['o/r'] })
+    const [busy, idle] = l.findAll('[data-test=repo-refresh]')
+    expect(busy.attributes('disabled')).toBeDefined()
+    expect(busy.attributes('aria-busy')).toBe('true')
+    expect(busy.find('svg').classes()).toContain('fa-spin')
+    expect(idle.attributes('disabled')).toBeUndefined()
+    expect(idle.find('svg').classes()).not.toContain('fa-spin')
+  })
+
+  it('disables every button while a full scan runs', () => {
+    const l = list({ manualRefresh: true, scanning: true })
+    for (const b of l.findAll('[data-test=repo-refresh]'))
+      expect(b.attributes('disabled')).toBeDefined()
+  })
+})
