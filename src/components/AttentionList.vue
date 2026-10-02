@@ -16,9 +16,12 @@ const props = defineProps<{
   facets: Facets
   owners: string[]
   active: number
+  manualRefresh?: boolean
+  refreshing?: string[]
+  scanning?: boolean
 }>()
 const filters = defineModel<Filters>('filters', { required: true })
-defineEmits<{ clear: [] }>()
+defineEmits<{ clear: []; refresh: [fullName: string] }>()
 
 const columnCount = useColumns()
 // A group's height is its header plus its rows, so rows+2 approximates it.
@@ -59,6 +62,10 @@ defineExpose({ focusSearch: () => bar.value?.focus() })
           :block="block"
           :now-ms="nowMs"
           :crit-seconds="critSeconds"
+          :manual-refresh="manualRefresh"
+          :refreshing="refreshing"
+          :scanning="scanning"
+          @refresh="(name) => $emit('refresh', name)"
         />
       </div>
     </div>

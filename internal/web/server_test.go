@@ -1,12 +1,15 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -19,14 +22,33 @@ import (
 var now = time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
 
 type fakeSource struct {
+	repoFn    func(name string) (collector.View, error)
+	repoCalls []string
 	st        collector.Stats
 	v         collector.View
 	refreshed int
+	mu        sync.Mutex
 }
 
 func (f *fakeSource) View() collector.View   { return f.v }
 func (f *fakeSource) Stats() collector.Stats { return f.st }
 func (f *fakeSource) RequestRefresh() bool   { f.refreshed++; return true }
+
+func (f *fakeSource) RefreshRepo(_ context.Context, name string) (collector.View, error) {
+	f.mu.Lock()
+	f.repoCalls = append(f.repoCalls, name)
+	f.mu.Unlock()
+	if f.repoFn != nil {
+		return f.repoFn(name)
+	}
+	return f.v, nil
+}
+
+func (f *fakeSource) calls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.repoCalls)
+}
 
 func testView() collector.View {
 	repo := model.Repo{
@@ -239,5 +261,189 @@ func TestManualRefreshRefusesCrossSiteRequests(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("same-origin: %d", rec.Code)
+	}
+}
+
+func post(h http.Handler, target string, hdr map[string]string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest("POST", target, nil)
+	for k, v := range hdr {
+		req.Header.Set(k, v)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+func repoServer(src *fakeSource, manual bool) (*Server, *time.Time) {
+	srv := newServer(src, testUI(), manual)
+	clock := now
+	srv.now = func() time.Time { return clock }
+	return srv, &clock
+}
+
+func TestRepoRefreshReturnsStateAndRepoName(t *testing.T) {
+	src := &fakeSource{v: testView()}
+	srv, _ := repoServer(src, true)
+	rec := post(srv.Handler(), "/refresh?repo=o/r", nil)
+	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "application/json" {
+		t.Fatalf("%d %v", rec.Code, rec.Header())
+	}
+	var got struct {
+		Repo  string `json:"repo"`
+		Repos []struct {
+			FullName string `json:"fullName"`
+		} `json:"repos"`
+		Counts struct{ Crit int } `json:"counts"`
+		Loaded bool               `json:"loaded"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Repo != "o/r" || !got.Loaded || len(got.Repos) != 2 || got.Counts.Crit != 1 {
+		t.Fatalf("body: %s", rec.Body.String())
+	}
+	if len(src.repoCalls) != 1 || src.repoCalls[0] != "o/r" || src.refreshed != 0 {
+		t.Fatalf("calls=%v full=%d", src.repoCalls, src.refreshed)
+	}
+}
+
+func TestRepoRefreshUnknownRepoIs404JSON(t *testing.T) {
+	src := &fakeSource{repoFn: func(string) (collector.View, error) { return collector.View{}, collector.ErrUnknownRepo }}
+	srv, _ := repoServer(src, true)
+	h := srv.Handler()
+	rec := post(h, "/refresh?repo=x/y", nil)
+	var body map[string]string
+	if rec.Code != http.StatusNotFound || json.Unmarshal(rec.Body.Bytes(), &body) != nil || body["error"] == "" {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	if rec := post(h, "/refresh?repo=x/y", nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("a rejected name must not start a cooldown: %d", rec.Code)
+	}
+}
+
+func TestRepoRefreshCooldownPerRepo(t *testing.T) {
+	src := &fakeSource{v: testView()}
+	srv, clock := repoServer(src, true)
+	h := srv.Handler()
+	if rec := post(h, "/refresh?repo=o/r", nil); rec.Code != http.StatusOK {
+		t.Fatalf("first: %d", rec.Code)
+	}
+	*clock = clock.Add(20 * time.Second)
+	rec := post(h, "/refresh?repo=O/R", nil)
+	if rec.Code != http.StatusTooManyRequests || rec.Header().Get("Retry-After") != "40" {
+		t.Fatalf("cooldown: %d retry-after=%q", rec.Code, rec.Header().Get("Retry-After"))
+	}
+	if rec := post(h, "/refresh?repo=o/bare", nil); rec.Code != http.StatusOK {
+		t.Fatalf("other repo must be independent: %d", rec.Code)
+	}
+	*clock = clock.Add(repoRefreshCooldown)
+	if rec := post(h, "/refresh?repo=o/r", nil); rec.Code != http.StatusOK || src.calls() != 3 {
+		t.Fatalf("after cooldown: %d calls=%d", rec.Code, src.calls())
+	}
+}
+
+func TestRepoRefreshDoesNotUseFullRefreshBudget(t *testing.T) {
+	src := &fakeSource{v: testView()}
+	srv, _ := repoServer(src, true)
+	h := srv.Handler()
+	if rec := post(h, "/refresh?repo=o/r", nil); rec.Code != http.StatusOK {
+		t.Fatalf("repo: %d", rec.Code)
+	}
+	if rec := post(h, "/refresh", nil); rec.Code != http.StatusAccepted {
+		t.Fatalf("full refresh after repo refresh: %d", rec.Code)
+	}
+	if rec := post(h, "/refresh", nil); rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("full refresh gap must still apply: %d", rec.Code)
+	}
+	if rec := post(h, "/refresh?repo=o/bare", nil); rec.Code != http.StatusOK {
+		t.Fatalf("repo refresh must not be blocked by the full gap: %d", rec.Code)
+	}
+}
+
+func TestRepoRefreshEmptyParamKeepsFullRefresh(t *testing.T) {
+	src := &fakeSource{v: testView()}
+	srv, _ := repoServer(src, true)
+	rec := post(srv.Handler(), "/refresh?repo=", nil)
+	if rec.Code != http.StatusAccepted || rec.Body.Len() != 0 || src.refreshed != 1 || src.calls() != 0 {
+		t.Fatalf("%d body=%q full=%d repo=%d", rec.Code, rec.Body.String(), src.refreshed, src.calls())
+	}
+}
+
+func TestRepoRefreshBusyIs409AndKeepsCooldownFree(t *testing.T) {
+	busy := true
+	src := &fakeSource{v: testView(), repoFn: func(string) (collector.View, error) {
+		if busy {
+			return collector.View{}, collector.ErrRefreshBusy
+		}
+		return testView(), nil
+	}}
+	srv, _ := repoServer(src, true)
+	h := srv.Handler()
+	if rec := post(h, "/refresh?repo=o/r", nil); rec.Code != http.StatusConflict {
+		t.Fatalf("busy: %d", rec.Code)
+	}
+	busy = false
+	if rec := post(h, "/refresh?repo=o/r", nil); rec.Code != http.StatusOK {
+		t.Fatalf("retry after busy: %d", rec.Code)
+	}
+}
+
+func TestRepoRefreshUnexpectedErrorIs500(t *testing.T) {
+	src := &fakeSource{repoFn: func(string) (collector.View, error) { return collector.View{}, errors.New("x") }}
+	srv, _ := repoServer(src, true)
+	if rec := post(srv.Handler(), "/refresh?repo=o/r", nil); rec.Code != http.StatusInternalServerError {
+		t.Fatalf("%d", rec.Code)
+	}
+}
+
+func TestRepoRefreshRefusesCrossSite(t *testing.T) {
+	src := &fakeSource{v: testView()}
+	srv, _ := repoServer(src, true)
+	h := srv.Handler()
+	for _, site := range []string{"cross-site", "same-site"} {
+		if rec := post(h, "/refresh?repo=o/r", map[string]string{"Sec-Fetch-Site": site}); rec.Code != http.StatusForbidden {
+			t.Fatalf("%s: %d", site, rec.Code)
+		}
+	}
+	if rec := post(h, "/refresh?repo=o/r", map[string]string{"Sec-Fetch-Site": "same-origin"}); rec.Code != http.StatusOK || src.calls() != 1 {
+		t.Fatalf("same-origin: %d calls=%d", rec.Code, src.calls())
+	}
+}
+
+func TestRepoRefreshDisabledByConfig(t *testing.T) {
+	src := &fakeSource{v: testView()}
+	srv, _ := repoServer(src, false)
+	rec := post(srv.Handler(), "/refresh?repo=o/r", nil)
+	if rec.Code == http.StatusOK || src.calls() != 0 {
+		t.Fatalf("%d calls=%d", rec.Code, src.calls())
+	}
+}
+
+func TestRepoRefreshConcurrentRequests(t *testing.T) {
+	src := &fakeSource{v: testView()}
+	srv, _ := repoServer(src, true)
+	h := srv.Handler()
+	var wg sync.WaitGroup
+	codes := make(chan int, 16)
+	for range 16 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			codes <- post(h, "/refresh?repo=o/r", nil).Code
+		}()
+	}
+	wg.Wait()
+	close(codes)
+	ok, limited := 0, 0
+	for c := range codes {
+		switch c {
+		case http.StatusOK:
+			ok++
+		case http.StatusTooManyRequests:
+			limited++
+		}
+	}
+	if ok != 1 || limited != 15 || src.calls() != 1 {
+		t.Fatalf("ok=%d limited=%d calls=%d", ok, limited, src.calls())
 	}
 }

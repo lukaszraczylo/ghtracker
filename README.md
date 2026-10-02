@@ -61,6 +61,14 @@ Alerts are evaluated when you read them, so PR ages keep advancing between refre
 - `/api/state` full state as JSON.
 - `/healthz` returns 503 until the first refresh completes.
 - `POST /refresh` runs an extra refresh and backs the Refresh button. It is on by default, limited to once per 5 minutes, and refuses cross-site requests. Set `manual_refresh: false` to disable it.
+- `POST /refresh?repo=owner/name` refreshes only that repository and answers when it finishes. An empty `repo` value runs the full refresh above.
+  - The repository must be in the configured list, or the answer is 404 with a JSON `{"error": ...}` body. The match ignores case.
+  - On success the answer is 200 with the same JSON as `/api/state`, plus a `repo` field. Only that repository changes. The last scan time and the schedule do not move.
+  - Each repository has its own cooldown of 60 seconds. Inside it, the answer is 429 with a `Retry-After` header. A repository refresh does not use the 5-minute budget of the full refresh, and the reverse also holds.
+  - While a full refresh or a refresh of the same repository runs, the answer is 409. The cooldown does not start, so you can retry at once.
+  - The same cross-site refusal and `manual_refresh: false` switch apply. The GitHub rate-limit protections below apply too.
+
+The dashboard shows a refresh button beside each project when `manual_refresh` is on.
 
 ## Metrics
 

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { fetchState, RescanLimitedError, requestRefresh } from '@/lib/api'
+import { fetchState, RescanLimitedError, requestRefresh, requestRepoRefresh } from '@/lib/api'
 import {
   activeFilterCount,
   applyFilters,
@@ -98,6 +98,9 @@ export const useTrackerStore = defineStore('tracker', () => {
   const loading = ref(false)
   const requesting = ref(false)
   const notice = ref('')
+  /** Screen-reader text for a finished single-repository refresh. */
+  const announcement = ref('')
+  const refreshingRepos = ref<string[]>([])
   const skewMs = ref(0)
   const tick = ref(Date.now())
 
@@ -143,13 +146,16 @@ export const useTrackerStore = defineStore('tracker', () => {
     tick.value = Date.now()
   }
 
+  function applyState(next: TrackerState): void {
+    skewMs.value = Date.parse(next.now) - Date.now()
+    tick.value = Date.now()
+    state.value = next
+  }
+
   async function load(): Promise<void> {
     loading.value = true
     try {
-      const next = await fetchState()
-      skewMs.value = Date.parse(next.now) - Date.now()
-      tick.value = Date.now()
-      state.value = next
+      applyState(await fetchState())
       error.value = ''
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e)
@@ -180,11 +186,32 @@ export const useTrackerStore = defineStore('tracker', () => {
     }
   }
 
+  /** Refreshes one repository; the answer carries the new state, so no extra fetch follows. */
+  async function refreshRepo(fullName: string): Promise<void> {
+    if (refreshingRepos.value.includes(fullName)) return
+    refreshingRepos.value = [...refreshingRepos.value, fullName]
+    notice.value = ''
+    announcement.value = ''
+    try {
+      const next = await requestRepoRefresh(fullName)
+      applyState(next)
+      const failed = next.repos.find((r) => r.fullName === fullName)?.error
+      if (failed) notice.value = `Could not refresh ${fullName}: ${failed}`
+      else announcement.value = `Refreshed ${fullName}`
+    } catch (e) {
+      notice.value = e instanceof Error ? e.message : String(e)
+    } finally {
+      refreshingRepos.value = refreshingRepos.value.filter((n) => n !== fullName)
+    }
+  }
+
   return {
     state,
     error,
     loading,
     notice,
+    announcement,
+    refreshingRepos,
     scanning,
     nowMs,
     blocks,
@@ -201,6 +228,7 @@ export const useTrackerStore = defineStore('tracker', () => {
     clearFilters,
     load,
     rescan,
+    refreshRepo,
     advanceClock,
   }
 })

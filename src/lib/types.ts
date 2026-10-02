@@ -56,6 +56,9 @@ export interface TrackerState {
   alerts: Alert[]
 }
 
+/** Answer to a single-repository refresh: the state after it, plus the repo name. */
+export type RepoRefreshResult = TrackerState & { repo: string }
+
 /** One line in a repo block: every alert that targets the same URL, merged. */
 export interface Row {
   kind: string

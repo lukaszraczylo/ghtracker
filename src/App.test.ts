@@ -89,4 +89,52 @@ describe('App', () => {
     await flushPromises()
     expect(off.find('[data-test=rescan]').exists()).toBe(false)
   })
+
+  it('refreshes one repo from its button, shows the new state and announces it', async () => {
+    const first = state({
+      manualRefresh: true,
+      repos: [repo({ refreshedAt: '2026-10-02T10:00:00Z' })],
+    })
+    const after = { ...first, repo: 'o/r', repos: [repo({ refreshedAt: '2026-10-02T12:00:00Z' })] }
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) =>
+      Promise.resolve(
+        new Response(JSON.stringify(init?.method === 'POST' ? after : first), { status: 200 }),
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const w = mount(App, { global: { plugins: [createPinia()] } })
+    await flushPromises()
+    await w.get('[data-test=project] [data-test=repo-refresh]').trigger('click')
+    await flushPromises()
+    expect(fetchMock).toHaveBeenCalledWith('/refresh?repo=o%2Fr', { method: 'POST' })
+    expect(w.get('[data-test=announcement]').text()).toBe('Refreshed o/r')
+  })
+
+  it('shows the refusal message when a repo is refreshed too soon', async () => {
+    const body = state({ manualRefresh: true, repos: [repo()] })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) =>
+        Promise.resolve(
+          init?.method === 'POST'
+            ? new Response('{}', { status: 429, headers: { 'Retry-After': '30' } })
+            : new Response(JSON.stringify(body), { status: 200 }),
+        ),
+      ),
+    )
+    const w = mount(App, { global: { plugins: [createPinia()] } })
+    await flushPromises()
+    await w.get('[data-test=project] [data-test=repo-refresh]').trigger('click')
+    await flushPromises()
+    expect(w.get('[data-test=notice]').text()).toBe('o/r was refreshed recently. Try again in 30s')
+    expect(
+      w.get('[data-test=project] [data-test=repo-refresh]').attributes('disabled'),
+    ).toBeUndefined()
+  })
+
+  it('hides the repo buttons when the server disables manual refresh', async () => {
+    const w = mountWith(state({ manualRefresh: false, repos: [repo()] }))
+    await flushPromises()
+    expect(w.find('[data-test=repo-refresh]').exists()).toBe(false)
+  })
 })

@@ -2,10 +2,19 @@
 import { faTag } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import AttentionRow from '@/components/AttentionRow.vue'
+import RepoRefreshButton from '@/components/RepoRefreshButton.vue'
 import { Badge } from '@/components/ui/badge'
 import type { Block } from '@/lib/types'
 
-defineProps<{ block: Block; nowMs: number; critSeconds: number }>()
+defineProps<{
+  block: Block
+  nowMs: number
+  critSeconds: number
+  manualRefresh?: boolean
+  refreshing?: string[]
+  scanning?: boolean
+}>()
+defineEmits<{ refresh: [fullName: string] }>()
 </script>
 
 <template>
@@ -24,8 +33,15 @@ defineProps<{ block: Block; nowMs: number; critSeconds: number }>()
           {{ block.repo.release.tag }}
         </a>
       </Badge>
-      <span class="text-muted-foreground ml-auto text-xs">
+      <span class="text-muted-foreground ml-auto flex items-center gap-1 text-xs">
         {{ block.rows.length }} {{ block.rows.length === 1 ? 'item' : 'items' }}
+        <RepoRefreshButton
+          v-if="manualRefresh"
+          :repo="block.repo.fullName"
+          :busy="refreshing?.includes(block.repo.fullName) ?? false"
+          :blocked="scanning ?? false"
+          @refresh="$emit('refresh', block.repo.fullName)"
+        />
       </span>
     </header>
     <ul class="divide-border divide-y px-4">

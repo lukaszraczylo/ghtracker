@@ -2,11 +2,20 @@
 import { faCodePullRequest, faCircleDot, faGears } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import RepoRefreshButton from '@/components/RepoRefreshButton.vue'
 import { ageSince, isZeroTime } from '@/lib/format'
 import type { Repo } from '@/lib/types'
 
-const props = defineProps<{ repos: Repo[]; total: number; focused: string | null; nowMs: number }>()
-defineEmits<{ select: [fullName: string] }>()
+const props = defineProps<{
+  repos: Repo[]
+  total: number
+  focused: string | null
+  nowMs: number
+  manualRefresh?: boolean
+  refreshing?: string[]
+  scanning?: boolean
+}>()
+defineEmits<{ select: [fullName: string]; refresh: [fullName: string] }>()
 
 /** Rows rendered at first and added each time the list is scrolled near its end. */
 const PAGE_SIZE = 20
@@ -111,6 +120,14 @@ const LABEL = { crit: 'Critical', warn: 'Warning', ok: 'Healthy' } as const
           <a v-else :href="repo.releasesUrl" class="text-muted-foreground hover:text-link text-xs"
             >no release</a
           >
+          <RepoRefreshButton
+            v-if="manualRefresh"
+            :repo="repo.fullName"
+            :busy="refreshing?.includes(repo.fullName) ?? false"
+            :blocked="scanning ?? false"
+            class="-my-1 -mr-1"
+            @refresh="$emit('refresh', repo.fullName)"
+          />
         </div>
         <div
           class="text-muted-foreground mt-1 flex items-center gap-4 pl-[18px] text-xs tabular-nums"

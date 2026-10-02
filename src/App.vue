@@ -17,6 +17,8 @@ const {
   state,
   error,
   notice,
+  announcement,
+  refreshingRepos,
   scanning,
   blocks,
   visibleBlocks,
@@ -91,6 +93,8 @@ onBeforeUnmount(() => {
       {{ notice }}
     </p>
 
+    <p class="sr-only" role="status" data-test="announcement">{{ announcement }}</p>
+
     <LoadingScreen
       v-if="!state || !state.loaded"
       :done="state?.scan.done ?? 0"
@@ -123,7 +127,11 @@ onBeforeUnmount(() => {
           :facets="facets"
           :owners="owners"
           :active="activeFilters"
+          :manual-refresh="state.manualRefresh"
+          :refreshing="refreshingRepos"
+          :scanning="scanning"
           @clear="store.clearFilters()"
+          @refresh="store.refreshRepo"
         />
         <aside class="lg:sticky lg:top-6 lg:self-start">
           <ProjectList
@@ -131,7 +139,11 @@ onBeforeUnmount(() => {
             :total="state.repos.length"
             :focused="filters.repo"
             :now-ms="nowMs"
+            :manual-refresh="state.manualRefresh"
+            :refreshing="refreshingRepos"
+            :scanning="scanning"
             @select="store.toggleRepo"
+            @refresh="store.refreshRepo"
           />
         </aside>
       </div>

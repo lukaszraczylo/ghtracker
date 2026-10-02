@@ -2,11 +2,14 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"log/slog"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +19,8 @@ import (
 
 const (
 	minManualRefreshGap = 5 * time.Minute
+	// repoRefreshCooldown limits each repository separately from the full-refresh gap.
+	repoRefreshCooldown = 60 * time.Second
 	indexFile           = "index.html"
 	assetsPrefix        = "/assets/"
 	immutableCache      = "public, max-age=31536000, immutable"
@@ -28,10 +33,12 @@ type Source interface {
 	View() collector.View
 	Stats() collector.Stats
 	RequestRefresh() bool
+	RefreshRepo(ctx context.Context, name string) (collector.View, error)
 }
 
 type Server struct {
 	lastManual    time.Time
+	lastRepo      map[string]time.Time
 	now           func() time.Time
 	src           Source
 	ui            fs.FS
@@ -43,7 +50,8 @@ type Server struct {
 
 // New builds the server; ui is the built frontend (index.html at its root).
 func New(src Source, metrics http.Handler, ui fs.FS, manualRefresh bool, log *slog.Logger) *Server {
-	return &Server{src: src, ui: ui, metrics: metrics, manualRefresh: manualRefresh, log: log, now: time.Now}
+	return &Server{src: src, ui: ui, metrics: metrics, manualRefresh: manualRefresh, log: log, now: time.Now,
+		lastRepo: make(map[string]time.Time)}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -114,6 +122,10 @@ func (s *Server) refresh(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "cross-site refresh refused", http.StatusForbidden)
 		return
 	}
+	if repo := r.URL.Query().Get("repo"); repo != "" {
+		s.refreshRepo(w, r, repo)
+		return
+	}
 	s.mu.Lock()
 	tooSoon := s.now().Sub(s.lastManual) < minManualRefreshGap
 	if !tooSoon {
@@ -126,4 +138,60 @@ func (s *Server) refresh(w http.ResponseWriter, r *http.Request) {
 	}
 	s.src.RequestRefresh()
 	w.WriteHeader(http.StatusAccepted)
+}
+
+// repoRefreshResponse is the full state after the refresh, so the UI can swap it in, plus the repo name.
+type repoRefreshResponse struct {
+	Repo string `json:"repo"`
+	apiState
+}
+
+// refreshRepo refreshes one repository and answers when it finishes. It has its own cooldown and
+// never touches the full-refresh gap. A running full refresh or same-repo refresh gives 409.
+func (s *Server) refreshRepo(w http.ResponseWriter, r *http.Request, repo string) {
+	key := strings.ToLower(repo)
+	s.mu.Lock()
+	prev, had := s.lastRepo[key]
+	wait := repoRefreshCooldown - s.now().Sub(prev)
+	if had && wait > 0 {
+		s.mu.Unlock()
+		w.Header().Set("Retry-After", strconv.Itoa(int((wait+time.Second-1)/time.Second)))
+		writeJSONError(w, http.StatusTooManyRequests, "repository refresh allowed once per "+repoRefreshCooldown.String())
+		return
+	}
+	s.lastRepo[key] = s.now()
+	s.mu.Unlock()
+
+	v, err := s.src.RefreshRepo(r.Context(), repo)
+	if err != nil {
+		// A refused or cancelled attempt spent no GitHub budget, so it must not start a cooldown.
+		s.mu.Lock()
+		if had {
+			s.lastRepo[key] = prev
+		} else {
+			delete(s.lastRepo, key)
+		}
+		s.mu.Unlock()
+		switch {
+		case errors.Is(err, collector.ErrUnknownRepo):
+			writeJSONError(w, http.StatusNotFound, "unknown repository")
+		case errors.Is(err, collector.ErrRefreshBusy):
+			writeJSONError(w, http.StatusConflict, "a refresh is already running; try again shortly")
+		default:
+			s.log.Error("refresh repo", "repo", repo, "err", err)
+			writeJSONError(w, http.StatusInternalServerError, "refresh failed")
+		}
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	if err := json.NewEncoder(w).Encode(repoRefreshResponse{Repo: repo, apiState: buildState(v, s.manualRefresh)}); err != nil {
+		s.log.Error("encode repo refresh", "err", err)
+	}
+}
+
+func writeJSONError(w http.ResponseWriter, code int, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
