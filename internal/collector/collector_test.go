@@ -351,3 +351,109 @@ func TestFailedFirstScanLinksToTheConfiguredHost(t *testing.T) {
 		t.Fatalf("repo link = %q", got)
 	}
 }
+
+func TestRefreshRepoReplacesOnlyThatRepo(t *testing.T) {
+	gen := 0
+	f := &fakeFetcher{fn: func(name string) (model.Repo, error) {
+		return model.Repo{FullName: name, URL: "u", Issues: make([]model.Issue, gen)}, nil
+	}}
+	c := newCollector(f, "o/a", "o/b")
+	c.Refresh(context.Background())
+	before := c.View()
+	gen = 2
+	v, err := c.RefreshRepo(context.Background(), "O/B")
+	if err != nil {
+		t.Fatal(err)
+	}
+	issues := map[string]int{}
+	for _, r := range v.Repos {
+		issues[r.FullName] = len(r.Issues)
+	}
+	if issues["o/a"] != 0 || issues["o/b"] != 2 {
+		t.Fatalf("only o/b must change: %v", issues)
+	}
+	if !v.LastRefresh.Equal(before.LastRefresh) || c.Stats().RefreshTotal != 1 {
+		t.Fatalf("full-scan bookkeeping must not move: %v %d", v.LastRefresh, c.Stats().RefreshTotal)
+	}
+	if len(f.calls) != 3 || f.calls[2] != "o/b" {
+		t.Fatalf("calls %v", f.calls)
+	}
+}
+
+func TestRefreshRepoFailureKeepsLastGoodDataAndAlerts(t *testing.T) {
+	fail := false
+	f := &fakeFetcher{fn: func(name string) (model.Repo, error) {
+		if fail {
+			return model.Repo{}, errors.New("boom")
+		}
+		return model.Repo{FullName: name, URL: "u", Issues: []model.Issue{{Number: 1, UpdatedAt: t0}}}, nil
+	}}
+	c := newCollector(f, "o/a")
+	c.Refresh(context.Background())
+	fail = true
+	v, err := c.RefreshRepo(context.Background(), "o/a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := v.Repos[0]; r.Up || r.Err != "boom" || len(r.Issues) != 1 || v.Crit != 1 {
+		t.Fatalf("%+v crit=%d", r, v.Crit)
+	}
+	if c.Stats().RepoErrorsTotal != 1 {
+		t.Fatalf("stats %+v", c.Stats())
+	}
+}
+
+func TestRefreshRepoIgnoresScanRateLimitFlag(t *testing.T) {
+	c := newCollector(&fakeFetcher{fn: func(n string) (model.Repo, error) { return model.Repo{FullName: n}, nil }}, "o/a")
+	c.limited.Store(true)
+	v, err := c.RefreshRepo(context.Background(), "o/a")
+	if err != nil || !v.Repos[0].Up {
+		t.Fatalf("err=%v %+v", err, v.Repos)
+	}
+}
+
+func TestRefreshRepoRejections(t *testing.T) {
+	c := newCollector(&fakeFetcher{fn: func(n string) (model.Repo, error) { return model.Repo{FullName: n}, nil }}, "o/a")
+	if _, err := c.RefreshRepo(context.Background(), "x/y"); !errors.Is(err, ErrUnknownRepo) {
+		t.Fatalf("unknown: %v", err)
+	}
+	c.refreshing.Store(true)
+	if _, err := c.RefreshRepo(context.Background(), "o/a"); !errors.Is(err, ErrRefreshBusy) {
+		t.Fatalf("full refresh running: %v", err)
+	}
+	c.refreshing.Store(false)
+	if !c.claim("o/a") {
+		t.Fatal("claim")
+	}
+	if _, err := c.RefreshRepo(context.Background(), "o/a"); !errors.Is(err, ErrRefreshBusy) {
+		t.Fatalf("same repo running: %v", err)
+	}
+}
+
+func TestRefreshRepoCancelledKeepsState(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	f := &fakeFetcher{fn: func(string) (model.Repo, error) { cancel(); return model.Repo{}, context.Canceled }}
+	c := newCollector(f, "o/a")
+	if _, err := c.RefreshRepo(ctx, "o/a"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("err=%v", err)
+	}
+	if len(c.View().Repos) != 0 || c.Stats().RepoErrorsTotal != 0 {
+		t.Fatal("a cancelled request must not mark the repo down")
+	}
+}
+
+func TestRefreshRepoConcurrentWithFullRefreshAndScheduled(t *testing.T) {
+	f := &fakeFetcher{fn: func(n string) (model.Repo, error) { return model.Repo{FullName: n}, nil }}
+	c := newCollector(f, "o/a", "o/b")
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(3)
+		go func() { defer wg.Done(); c.Refresh(context.Background()) }()
+		go func() { defer wg.Done(); _, _ = c.RefreshRepo(context.Background(), "o/a") }()
+		go func() { defer wg.Done(); _ = c.View(); _ = c.Stats() }()
+	}
+	wg.Wait()
+	if len(c.View().Repos) != 2 {
+		t.Fatalf("%+v", c.View().Repos)
+	}
+}

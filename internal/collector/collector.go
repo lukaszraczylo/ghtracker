@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -15,6 +16,13 @@ import (
 )
 
 const repoFetchTimeout = 5 * time.Minute
+
+var (
+	// ErrUnknownRepo means the name is not in the configured repository list.
+	ErrUnknownRepo = errors.New("repository is not configured")
+	// ErrRefreshBusy means a full refresh or a refresh of the same repository is running.
+	ErrRefreshBusy = errors.New("a refresh is already running")
+)
 
 // Fetcher loads the data for one "owner/name" repository.
 type Fetcher interface {
@@ -52,6 +60,7 @@ type Collector struct {
 	lastRefresh time.Time
 	fetch       Fetcher
 	repos       map[string]model.Repo
+	inflight    map[string]struct{}
 	now         func() time.Time
 	log         *slog.Logger
 	webBase     string
@@ -83,6 +92,7 @@ func New(f Fetcher, cfg *config.Config, log *slog.Logger) *Collector {
 		log:         log,
 		kick:        make(chan struct{}, 1),
 		repos:       make(map[string]model.Repo, len(cfg.Repos)),
+		inflight:    make(map[string]struct{}),
 	}
 }
 
@@ -136,7 +146,7 @@ func (c *Collector) Refresh(ctx context.Context) {
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
-			results[i] = c.refreshOne(ctx, name, start)
+			results[i] = c.refreshOne(ctx, name, start, true)
 			c.scanDone.Add(1)
 		}()
 	}
@@ -154,18 +164,28 @@ func (c *Collector) Refresh(ctx context.Context) {
 	c.log.Info("refresh complete", "repos", len(c.names), "duration", c.lastDur.Round(time.Millisecond))
 }
 
-func (c *Collector) refreshOne(ctx context.Context, name string, at time.Time) model.Repo {
-	ctx, cancel := context.WithTimeout(ctx, repoFetchTimeout)
-	defer cancel()
+// refreshOne fetches one repo. With respectLimit set, it skips the fetch once the scan hit a rate limit.
+func (c *Collector) refreshOne(ctx context.Context, name string, at time.Time, respectLimit bool) model.Repo {
 	var r model.Repo
 	err := model.ErrRateLimited
 	// Once any repo hits the limit, remaining repos are skipped so no further requests go out.
-	if !c.limited.Load() {
-		r, err = c.fetch.FetchRepo(ctx, name)
+	if !respectLimit || !c.limited.Load() {
+		r, err = c.fetchRepo(ctx, name)
 	}
-	if errors.Is(err, model.ErrRateLimited) {
+	if respectLimit && errors.Is(err, model.ErrRateLimited) {
 		c.limited.Store(true)
 	}
+	return c.settle(name, at, r, err)
+}
+
+func (c *Collector) fetchRepo(ctx context.Context, name string) (model.Repo, error) {
+	ctx, cancel := context.WithTimeout(ctx, repoFetchTimeout)
+	defer cancel()
+	return c.fetch.FetchRepo(ctx, name)
+}
+
+// settle turns a fetch result into the repo to store; a failure keeps the last good data.
+func (c *Collector) settle(name string, at time.Time, r model.Repo, err error) model.Repo {
 	if err == nil {
 		r.FullName, r.Up, r.RefreshedAt = name, true, at
 		return r
@@ -180,6 +200,56 @@ func (c *Collector) refreshOne(ctx context.Context, name string, at time.Time) m
 	}
 	prev.Up, prev.Err = false, err.Error()
 	return prev
+}
+
+// RefreshRepo fetches one configured repo now and replaces only its state, leaving the schedule,
+// last scan time and other repos untouched. It fails with ErrRefreshBusy while a full refresh or a
+// refresh of the same repo runs. The GitHub client still enforces the rate-limit reserve.
+func (c *Collector) RefreshRepo(ctx context.Context, name string) (View, error) {
+	canon, ok := c.configured(name)
+	if !ok {
+		return View{}, ErrUnknownRepo
+	}
+	if c.refreshing.Load() || !c.claim(canon) {
+		return View{}, ErrRefreshBusy
+	}
+	defer c.release(canon)
+
+	at := c.now()
+	r, err := c.fetchRepo(ctx, canon)
+	if err != nil && ctx.Err() != nil {
+		return View{}, ctx.Err()
+	}
+	r = c.settle(canon, at, r, err)
+	c.mu.Lock()
+	c.repos[canon] = r
+	c.mu.Unlock()
+	return c.View(), nil
+}
+
+func (c *Collector) configured(name string) (string, bool) {
+	for _, n := range c.names {
+		if strings.EqualFold(n, name) {
+			return n, true
+		}
+	}
+	return "", false
+}
+
+func (c *Collector) claim(name string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, busy := c.inflight[name]; busy {
+		return false
+	}
+	c.inflight[name] = struct{}{}
+	return true
+}
+
+func (c *Collector) release(name string) {
+	c.mu.Lock()
+	delete(c.inflight, name)
+	c.mu.Unlock()
 }
 
 // Stats returns refresh-loop counters.
