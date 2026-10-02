@@ -49,7 +49,7 @@ function onOwners(value: unknown): void {
 <template>
   <div class="flex flex-col gap-3" data-test="filter-bar">
     <div class="flex flex-wrap items-center gap-3">
-      <div class="relative min-w-56 flex-1">
+      <div class="relative min-w-0 basis-full sm:min-w-56 sm:flex-1 sm:basis-0">
         <FontAwesomeIcon
           :icon="faMagnifyingGlass"
           class="text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2"
@@ -75,6 +75,7 @@ function onOwners(value: unknown): void {
       </div>
       <ToggleGroup
         type="single"
+        class="max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         variant="outline"
         size="sm"
         :model-value="filters.severity"
@@ -96,6 +97,7 @@ function onOwners(value: unknown): void {
     <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
       <ToggleGroup
         type="multiple"
+        class="max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         variant="outline"
         size="sm"
         :model-value="filters.kinds"
@@ -117,6 +119,7 @@ function onOwners(value: unknown): void {
       <ToggleGroup
         v-if="owners.length > 1"
         type="multiple"
+        class="max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         variant="outline"
         size="sm"
         :model-value="filters.owners"

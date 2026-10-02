@@ -28,7 +28,7 @@ const nextIn = computed(() => {
 </script>
 
 <template>
-  <header class="flex items-center justify-between gap-4">
+  <header class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
     <div class="flex items-center gap-3">
       <span
         class="border-border bg-surface text-link flex size-9 items-center justify-center rounded-md border"
@@ -37,8 +37,12 @@ const nextIn = computed(() => {
       </span>
       <span class="text-lg font-semibold tracking-tight">ghtracker</span>
     </div>
-    <div class="text-muted-foreground flex items-center gap-5 text-sm">
-      <span v-if="updated" class="hidden sm:inline" data-test="updated">
+    <div class="text-muted-foreground flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
+      <span
+        v-if="updated"
+        class="order-last w-full text-xs sm:order-none sm:w-auto sm:text-sm"
+        data-test="updated"
+      >
         Scanned {{ updated }} ago
         <span class="text-muted-foreground/70"> · next in {{ nextIn }}</span>
       </span>
@@ -52,7 +56,8 @@ const nextIn = computed(() => {
         @click="$emit('rescan')"
       >
         <FontAwesomeIcon :icon="faArrowsRotate" :spin="scanning" aria-hidden="true" />
-        {{ scanning ? 'Rescanning…' : 'Rescan repositories' }}
+        <span class="hidden sm:inline">{{ scanning ? 'Rescanning…' : 'Rescan repositories' }}</span>
+        <span class="sm:hidden">{{ scanning ? 'Scanning…' : 'Rescan' }}</span>
       </Button>
     </div>
   </header>

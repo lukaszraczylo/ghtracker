@@ -12,7 +12,10 @@ const ratio = computed(() => secondsSince(props.row.since, props.nowMs) / props.
 </script>
 
 <template>
-  <li class="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-start gap-x-3 py-3" data-test="row">
+  <li
+    class="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1 py-3 sm:grid-cols-[2rem_minmax(0,1fr)_auto]"
+    data-test="row"
+  >
     <span
       class="flex size-8 items-center justify-center rounded-md"
       :class="row.severity === 'crit' ? 'bg-crit/12 text-crit' : 'bg-warn/12 text-warn'"
@@ -31,7 +34,9 @@ const ratio = computed(() => secondsSince(props.row.since, props.nowMs) / props.
         {{ shorten(row.detail, 120) }}
       </p>
     </div>
-    <div class="flex flex-col items-end gap-1.5 pt-0.5">
+    <div
+      class="col-start-2 flex items-center gap-3 sm:col-start-auto sm:flex-col sm:items-end sm:gap-1.5 sm:pt-0.5"
+    >
       <span class="text-muted-foreground font-mono text-xs whitespace-nowrap">
         {{ isZeroTime(row.since) ? '' : ageSince(row.since, nowMs) }}
       </span>

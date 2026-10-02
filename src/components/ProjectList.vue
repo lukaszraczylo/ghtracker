@@ -26,7 +26,10 @@ const LABEL = { crit: 'Critical', warn: 'Warning', ok: 'Healthy' } as const
     >
       No projects match the search.
     </p>
-    <ul v-else class="border-border bg-surface divide-border divide-y rounded-lg border">
+    <ul
+      v-else
+      class="border-border bg-surface divide-border max-h-[70vh] divide-y overflow-y-auto rounded-lg border lg:max-h-[calc(100vh-7rem)]"
+    >
       <li
         v-for="repo in repos"
         :key="repo.fullName"

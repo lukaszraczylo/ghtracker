@@ -24,14 +24,19 @@ function summary(c: RepoCounts | undefined): string {
 
 <template>
   <TooltipProvider :delay-duration="80">
-    <div class="flex gap-1" role="group" aria-label="Project health" data-test="strip">
+    <div
+      class="grid grid-cols-[repeat(auto-fill,minmax(1.5rem,1fr))] gap-1"
+      role="group"
+      aria-label="Project health"
+      data-test="strip"
+    >
       <Tooltip v-for="repo in repos" :key="repo.fullName">
         <TooltipTrigger as-child>
           <button
             type="button"
             :aria-label="`${repo.fullName}: ${summary(counts.get(repo.fullName))}`"
             :aria-pressed="focused === repo.fullName"
-            class="h-14 min-w-0 flex-1 rounded-[3px] transition-colors focus-visible:outline-offset-1"
+            class="h-9 min-w-0 rounded-[3px] sm:h-11 transition-colors focus-visible:outline-offset-1"
             :class="[
               SEGMENT[repo.health],
               focused === repo.fullName

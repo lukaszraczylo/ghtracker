@@ -39,12 +39,12 @@ describe('AppHeader', () => {
 
   it('emits rescan and shows progress while a scan runs', async () => {
     const w = mount(AppHeader, { props: { ...base, manualRefresh: true } })
-    expect(w.get('[data-test=rescan]').text()).toBe('Rescan repositories')
+    expect(w.get('[data-test=rescan]').text()).toContain('Rescan repositories')
     await w.get('[data-test=rescan]').trigger('click')
     expect(w.emitted('rescan')).toHaveLength(1)
     const busy = mount(AppHeader, { props: { ...base, manualRefresh: true, scanning: true } })
     expect(busy.get('[data-test=rescan]').attributes('disabled')).toBeDefined()
-    expect(busy.get('[data-test=rescan]').text()).toBe('Rescanning…')
+    expect(busy.get('[data-test=rescan]').text()).toContain('Rescanning…')
   })
 })
 

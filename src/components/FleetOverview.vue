@@ -57,7 +57,7 @@ const rows = computed<{ label: string; value: number; icon: IconDefinition; tone
 
 <template>
   <section
-    class="grid grid-cols-[minmax(0,1fr)] items-end gap-x-14 gap-y-8 lg:grid-cols-[minmax(0,1fr)_20rem]"
+    class="grid grid-cols-[minmax(0,1fr)] items-end gap-x-14 gap-y-8 lg:grid-cols-[minmax(0,1fr)_22rem]"
     aria-label="Fleet status"
   >
     <div>
@@ -68,22 +68,22 @@ const rows = computed<{ label: string; value: number; icon: IconDefinition; tone
         <template v-else>All {{ repos.length }} projects are healthy</template>
       </p>
       <h1
-        class="flex flex-wrap items-baseline gap-x-10 gap-y-1 font-semibold tracking-tight"
+        class="flex flex-wrap items-baseline gap-x-6 gap-y-1 sm:gap-x-10 font-semibold tracking-tight"
         data-test="headline"
       >
         <template v-if="crit > 0 || warn > 0">
           <span v-if="crit > 0" class="text-crit">
-            <span class="text-7xl leading-none tabular-nums">{{ crit }}</span>
+            <span class="text-5xl leading-none tabular-nums sm:text-7xl">{{ crit }}</span>
             <span class="ml-2 text-xl font-medium">critical</span>
           </span>
           <span v-if="warn > 0" class="text-warn">
-            <span class="text-7xl leading-none tabular-nums">{{ warn }}</span>
+            <span class="text-5xl leading-none tabular-nums sm:text-7xl">{{ warn }}</span>
             <span class="ml-2 text-xl font-medium">{{ warn === 1 ? 'warning' : 'warnings' }}</span>
           </span>
         </template>
-        <span v-else class="text-ok text-7xl leading-none">All clear</span>
+        <span v-else class="text-ok text-5xl leading-none sm:text-7xl">All clear</span>
       </h1>
-      <div class="mt-8">
+      <div class="mt-6 sm:mt-8">
         <FleetStrip
           :repos="repos"
           :counts="counts"
@@ -101,7 +101,7 @@ const rows = computed<{ label: string; value: number; icon: IconDefinition; tone
           <span class="flex items-center gap-1.5"
             ><span class="bg-ok/40 size-2 rounded-[2px]"></span>healthy</span
           >
-          <span class="ml-auto">Select a segment to focus a project</span>
+          <span class="sm:ml-auto">Tap a segment to focus a project</span>
         </p>
       </div>
     </div>

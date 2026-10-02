@@ -64,7 +64,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="mx-auto max-w-7xl px-5 py-6 sm:px-8">
+  <main class="w-full px-4 py-4 sm:px-6 sm:py-6 lg:px-10">
     <AppHeader
       :last-refresh="state?.lastRefresh ?? ''"
       :now-ms="nowMs"
@@ -92,7 +92,7 @@ onBeforeUnmount(() => {
       Fetching data from GitHub
     </p>
     <template v-else>
-      <div class="mt-12">
+      <div class="mt-8 sm:mt-12">
         <FleetOverview
           :crit="state.counts.crit"
           :warn="state.counts.warn"
@@ -106,7 +106,7 @@ onBeforeUnmount(() => {
         />
       </div>
       <div
-        class="mt-14 grid grid-cols-[minmax(0,1fr)] gap-x-10 gap-y-12 lg:grid-cols-[minmax(0,1fr)_23rem]"
+        class="mt-10 grid grid-cols-[minmax(0,1fr)] gap-x-10 gap-y-10 sm:mt-14 lg:grid-cols-[minmax(0,1fr)_24rem] 2xl:grid-cols-[minmax(0,1fr)_28rem]"
       >
         <AttentionList
           ref="list"

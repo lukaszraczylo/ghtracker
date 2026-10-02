@@ -43,7 +43,7 @@ defineExpose({ focusSearch: () => bar.value?.focus() })
       <FontAwesomeIcon :icon="faCircleCheck" class="text-ok text-xl" aria-hidden="true" />
       Nothing matches the current filters.
     </div>
-    <div v-else class="flex flex-col gap-4">
+    <div v-else class="grid grid-cols-[minmax(0,1fr)] items-start gap-4 2xl:grid-cols-2">
       <RepoGroup
         v-for="block in blocks"
         :key="block.repo.fullName"
