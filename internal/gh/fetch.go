@@ -360,6 +360,9 @@ func (c *Client) workflowRuns(ctx context.Context, full string, id int64, branch
 	path := fmt.Sprintf("/repos/%s/actions/workflows/%d/runs", full, id)
 	get := c.getJSON
 	if fresh {
+		// GitHub can keep answering one exact query from an old cached result, for weeks, whatever
+		// the connection. A different query string skips that entry and reads current runs.
+		q.Set("page", "1")
 		get = c.getJSONFresh
 	}
 	if err := get(ctx, full, path, q, &out); err != nil {

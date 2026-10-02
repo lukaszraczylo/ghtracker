@@ -460,13 +460,13 @@ func TestAPIErrorMessageParsing(t *testing.T) {
 	}
 }
 
-// staleThenFresh serves an old failing run on the first request and the current runs afterwards,
-// like a lagging GitHub replica followed by a healthy one.
+// staleThenFresh models GitHub answering one exact query from an old cached result: the plain
+// query returns an old failing run every time, and the same query with page=1 returns current runs.
 func staleThenFresh(f *fakeGitHub, path string) *atomic.Int64 {
 	var calls atomic.Int64
 	f.routes[path] = func(w http.ResponseWriter, r *http.Request) {
-		n := calls.Add(1)
-		if n == 1 {
+		calls.Add(1)
+		if r.URL.Query().Get("page") == "" {
 			_, _ = w.Write([]byte(`{"workflow_runs":[
 			  {"id":1,"html_url":"old","event":"schedule","head_branch":"main","status":"completed","conclusion":"failure","created_at":"2026-09-11T03:02:00Z"}]}`))
 			return
@@ -482,7 +482,7 @@ func staleThenFresh(f *fakeGitHub, path string) *atomic.Int64 {
 	return &calls
 }
 
-func TestStaleFailureIsConfirmedOnANewConnection(t *testing.T) {
+func TestStaleFailureIsConfirmedWithADifferentQuery(t *testing.T) {
 	f := newFake(t)
 	c := f.client(t, 10)
 	f.json("/repos/o/r/actions/workflows", `{"workflows":[{"id":7,"name":"Autoupdate","html_url":"w","state":"active"}]}`)
