@@ -14,6 +14,18 @@ thresholds: # negative disables a check
   issue_stale_after: 720h # no activity this long = warning (aggregated per repo)
   workflow_stuck_after: 6h # queued / in progress this long = warning
 
+# Optional buttons on alerts. Each one POSTs the alert as JSON to a webhook. Omit the block to turn the feature off.
+# actions:
+#   - id: rerun # [a-z0-9-]+
+#     label: Re-run # button text
+#     kinds: [workflow_failed] # omit for every alert kind
+#     webhook:
+#       url: https://example.internal/hooks/rerun
+#       token_env: ACTION_TOKEN # env var holding a bearer token; optional
+#       timeout: 10s
+#     status_url: https://example.internal/hooks/rerun/status # optional
+#     confirm: "Run this action for the selected alert?" # optional; omit for no dialog
+
 max_items: 100 # per repo, issues and PRs
 concurrency: 2
 

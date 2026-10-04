@@ -41,6 +41,7 @@ type Server struct {
 	lastRepo      map[string]time.Time
 	now           func() time.Time
 	src           Source
+	actions       *Actions
 	ui            fs.FS
 	metrics       http.Handler
 	log           *slog.Logger
@@ -63,6 +64,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /metrics", s.metrics)
 	if s.manualRefresh {
 		mux.HandleFunc("POST /refresh", s.refresh)
+	}
+	if s.actions != nil {
+		mux.HandleFunc("POST /api/actions/{id}", s.runAction)
 	}
 	return securityHeaders(mux)
 }
@@ -99,10 +103,12 @@ func (s *Server) asset(w http.ResponseWriter, r *http.Request) {
 	http.ServeFileFS(w, r, s.ui, name)
 }
 
-func (s *Server) state(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) state(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
-	if err := json.NewEncoder(w).Encode(buildState(s.src.View(), s.manualRefresh)); err != nil {
+	st := buildState(s.src.View(), s.manualRefresh)
+	s.decorate(r.Context(), &st)
+	if err := json.NewEncoder(w).Encode(st); err != nil {
 		s.log.Error("encode state", "err", err)
 	}
 }
@@ -117,8 +123,7 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) refresh(w http.ResponseWriter, r *http.Request) {
-	// Browsers label cross-site requests; refuse them so another page cannot spend the API budget.
-	if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
+	if crossSite(r) {
 		http.Error(w, "cross-site refresh refused", http.StatusForbidden)
 		return
 	}
@@ -138,6 +143,13 @@ func (s *Server) refresh(w http.ResponseWriter, r *http.Request) {
 	}
 	s.src.RequestRefresh()
 	w.WriteHeader(http.StatusAccepted)
+}
+
+// crossSite reports whether the browser labelled the request as cross-site, so another page
+// cannot spend the API budget or fire a webhook.
+func crossSite(r *http.Request) bool {
+	site := r.Header.Get("Sec-Fetch-Site")
+	return site != "" && site != "same-origin" && site != "none"
 }
 
 // repoRefreshResponse is the full state after the refresh, so the UI can swap it in, plus the repo name.
@@ -185,7 +197,9 @@ func (s *Server) refreshRepo(w http.ResponseWriter, r *http.Request, repo string
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
-	if err := json.NewEncoder(w).Encode(repoRefreshResponse{Repo: repo, apiState: buildState(v, s.manualRefresh)}); err != nil {
+	st := buildState(v, s.manualRefresh)
+	s.decorate(r.Context(), &st)
+	if err := json.NewEncoder(w).Encode(repoRefreshResponse{Repo: repo, apiState: st}); err != nil {
 		s.log.Error("encode repo refresh", "err", err)
 	}
 }

@@ -70,6 +70,29 @@ Alerts are evaluated when you read them, so PR ages keep advancing between refre
 
 The dashboard shows a refresh button beside each project when `manual_refresh` is on.
 
+## Alert actions
+
+An action adds a button to alerts. Pressing it sends the alert as JSON to a webhook that you run, for example to re-run a failed pipeline or to open a ticket. Without an `actions` block the feature is off: the state document, the endpoints and the UI do not change.
+
+```yaml
+actions:
+  - id: rerun # [a-z0-9-]+, appears in the payload and the endpoint
+    label: Re-run # button text
+    kinds: [workflow_failed] # alert kinds that show the button; omit for every kind
+    webhook:
+      url: https://example.internal/hooks/rerun
+      token_env: ACTION_TOKEN # name of an environment variable that holds a bearer token; optional
+      timeout: 10s
+    status_url: https://example.internal/hooks/rerun/status # optional
+    confirm: "Run this action for the selected alert?" # optional; omit for no dialog
+```
+
+- `POST /api/actions/{id}` takes `{"repo": "owner/name", "url": "<alert url>"}`. It refuses cross-site requests like `POST /refresh`. The action must exist, the repository must be in the configured list, and a current alert with that repo and URL must have a kind listed in `kinds`. Otherwise the answer is 404.
+- The server then POSTs `{"action": "<id>", "alert": {"repo", "kind", "severity", "subject", "detail", "url", "since"}, "requestedAt": "<RFC 3339>"}` to `webhook.url`. When `token_env` is set, the request carries `Authorization: Bearer <token>`. The server never logs the token and never follows redirects.
+- A 2xx answer succeeds. If its body is JSON `{"state", "label", "link"}`, the UI shows it as the status of that alert. A non-2xx answer becomes an error message with the upstream body cut to 300 characters. An unreachable webhook gives 502.
+- `GET /api/state` gains `actions` (`id`, `label`, `confirm`, `kinds`; no URLs and no tokens). When `status_url` is set, the server also fetches it with `GET` (same bearer token) and expects a JSON list of `{"repo", "url", "state", "label", "link"}` rows, newest first. It matches rows to alerts by repo and URL and adds `actionStatus` to each alert, keyed by action id. The result is cached for 10 seconds. If `status_url` is down, the state omits `actionStatus` and sets `actionsError`.
+- A `link` that is not an http or https address is dropped.
+
 ## Metrics
 
 All metrics use the `ghtracker_` prefix. Gauges are computed at scrape time.
@@ -84,6 +107,7 @@ All metrics use the `ghtracker_` prefix. Gauges are computed at scrape time.
 | `release_info`, `release_published_timestamp_seconds`                                                          | repo, version, url         |
 | `alerts`                                                                                                       | severity                   |
 | `refreshes_total`, `repo_refresh_errors_total`, `last_refresh_duration_seconds`, `github_rate_limit_remaining` | none                       |
+| `action_requests_total` (counter; result is `ok`, `rejected` or `error`; only with `actions`)                  | action, result             |
 
 Example alert rules:
 

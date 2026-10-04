@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -142,6 +143,81 @@ func TestWebBase(t *testing.T) {
 	for in, want := range tests {
 		if got := WebBase(in); got != want {
 			t.Errorf("WebBase(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestActionsDefaultOff(t *testing.T) {
+	c := valid()
+	if err := c.finalize(env(nil), keyFile); err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Actions) != 0 {
+		t.Fatalf("actions must default to none: %+v", c.Actions)
+	}
+}
+
+func TestActionsFinalize(t *testing.T) {
+	good := func() Action {
+		return Action{ID: "rerun", Webhook: Webhook{URL: "https://hooks.example.test/rerun", TokenEnv: "T"}}
+	}
+	tests := map[string]struct {
+		mutate  func(*Action)
+		extra   []Action
+		wantErr bool
+	}{
+		"ok":               {mutate: func(*Action) {}},
+		"no token env":     {mutate: func(a *Action) { a.Webhook.TokenEnv = "" }},
+		"bad id upper":     {mutate: func(a *Action) { a.ID = "Re_run" }, wantErr: true},
+		"empty id":         {mutate: func(a *Action) { a.ID = "" }, wantErr: true},
+		"duplicate id":     {mutate: func(*Action) {}, extra: []Action{good()}, wantErr: true},
+		"bad webhook":      {mutate: func(a *Action) { a.Webhook.URL = "ftp://x" }, wantErr: true},
+		"no webhook":       {mutate: func(a *Action) { a.Webhook.URL = "" }, wantErr: true},
+		"bad status url":   {mutate: func(a *Action) { a.StatusURL = "nope" }, wantErr: true},
+		"status url ok":    {mutate: func(a *Action) { a.StatusURL = "http://status.example.test/s" }},
+		"negative timeout": {mutate: func(a *Action) { a.Webhook.Timeout = -time.Second }, wantErr: true},
+		"token env unset":  {mutate: func(a *Action) { a.Webhook.TokenEnv = "MISSING" }, wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			a := good()
+			tc.mutate(&a)
+			c := valid()
+			c.Actions = append([]Action{a}, tc.extra...)
+			err := c.finalize(env(map[string]string{"T": "s3cret"}), keyFile)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tc.wantErr)
+			}
+			if err != nil && strings.Contains(err.Error(), "s3cret") {
+				t.Fatal("error leaks token")
+			}
+			if err == nil {
+				got := c.Actions[0]
+				if got.Label != "rerun" || got.Webhook.Timeout != DefaultActionTimeout {
+					t.Fatalf("defaults wrong: %+v", got)
+				}
+				if a.Webhook.TokenEnv == "T" && got.Token != "s3cret" {
+					t.Fatalf("token not read: %+v", got)
+				}
+			}
+		})
+	}
+}
+
+func TestActionAppliesTo(t *testing.T) {
+	tests := []struct {
+		kind  string
+		kinds []string
+		want  bool
+	}{
+		{kinds: nil, kind: "anything", want: true},
+		{kinds: []string{"workflow_failed"}, kind: "workflow_failed", want: true},
+		{kinds: []string{"workflow_failed"}, kind: "pr_waiting", want: false},
+		{kinds: []string{"a", "b"}, kind: "b", want: true},
+	}
+	for _, tc := range tests {
+		if got := (Action{Kinds: tc.kinds}).AppliesTo(tc.kind); got != tc.want {
+			t.Errorf("%v.AppliesTo(%q) = %v", tc.kinds, tc.kind, got)
 		}
 	}
 }

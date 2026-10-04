@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -28,13 +29,49 @@ const (
 	MinRefresh             = time.Minute
 	dataStaleGrace         = 30 * time.Minute
 	defaultDataStaleFactor = 2
+	DefaultActionTimeout   = 10 * time.Second
 )
+
+var actionIDPattern = regexp.MustCompile(`^[a-z0-9-]+$`)
+
+// Action is an operator-defined button on alerts. Pressing it POSTs the alert to a webhook.
+type Action struct {
+	ID        string `yaml:"id"`
+	Label     string `yaml:"label"`
+	Confirm   string `yaml:"confirm"`
+	StatusURL string `yaml:"status_url"`
+	// Token comes from the environment variable named by Webhook.TokenEnv, never from the file.
+	Token   string  `yaml:"-"`
+	Webhook Webhook `yaml:"webhook"`
+	// Kinds limits the action to these alert kinds; empty means every kind.
+	Kinds []string `yaml:"kinds"`
+}
+
+type Webhook struct {
+	URL      string        `yaml:"url"`
+	TokenEnv string        `yaml:"token_env"`
+	Timeout  time.Duration `yaml:"timeout"`
+}
+
+// AppliesTo reports whether the action is offered for an alert kind.
+func (a Action) AppliesTo(kind string) bool {
+	if len(a.Kinds) == 0 {
+		return true
+	}
+	for _, k := range a.Kinds {
+		if k == kind {
+			return true
+		}
+	}
+	return false
+}
 
 type Config struct {
 	// ManualRefresh enables POST /refresh and the rescan button; it defaults to on.
 	ManualRefresh   *bool         `yaml:"manual_refresh"`
 	Listen          string        `yaml:"listen"`
 	Repos           []string      `yaml:"repos"`
+	Actions         []Action      `yaml:"actions"`
 	GitHub          GitHub        `yaml:"github"`
 	Thresholds      Thresholds    `yaml:"thresholds"`
 	RefreshInterval time.Duration `yaml:"refresh_interval"`
@@ -127,12 +164,56 @@ func (c *Config) finalize(getenv func(string) string, readFile func(string) ([]b
 		c.GitHub.PrivateKeyPEM = string(pem)
 	}
 
+	if err := finalizeActions(c.Actions, getenv); err != nil {
+		return err
+	}
+
 	repos, err := normalizeRepos(c.Repos)
 	if err != nil {
 		return err
 	}
 	c.Repos = repos
 	return nil
+}
+
+func finalizeActions(actions []Action, getenv func(string) string) error {
+	seen := make(map[string]bool, len(actions))
+	for i := range actions {
+		a := &actions[i]
+		if !actionIDPattern.MatchString(a.ID) {
+			return fmt.Errorf("actions[%d].id %q must match [a-z0-9-]+", i, a.ID)
+		}
+		if seen[a.ID] {
+			return fmt.Errorf("actions[%d].id %q is used twice", i, a.ID)
+		}
+		seen[a.ID] = true
+		if a.Label == "" {
+			a.Label = a.ID
+		}
+		if !isHTTPURL(a.Webhook.URL) {
+			return fmt.Errorf("actions[%s].webhook.url %q must be an http or https address", a.ID, a.Webhook.URL)
+		}
+		if a.StatusURL != "" && !isHTTPURL(a.StatusURL) {
+			return fmt.Errorf("actions[%s].status_url %q must be an http or https address", a.ID, a.StatusURL)
+		}
+		if a.Webhook.Timeout < 0 {
+			return fmt.Errorf("actions[%s].webhook.timeout must not be negative", a.ID)
+		}
+		if a.Webhook.Timeout == 0 {
+			a.Webhook.Timeout = DefaultActionTimeout
+		}
+		if env := a.Webhook.TokenEnv; env != "" {
+			if a.Token = getenv(env); a.Token == "" {
+				return fmt.Errorf("actions[%s].webhook.token_env: $%s is empty", a.ID, env)
+			}
+		}
+	}
+	return nil
+}
+
+func isHTTPURL(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
 }
 
 func setDefault(d *time.Duration, def time.Duration) {

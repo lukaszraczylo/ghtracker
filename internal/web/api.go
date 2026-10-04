@@ -10,13 +10,15 @@ import (
 // apiState is the JSON contract with the UI. Lists of healthy items stay on GitHub;
 // the UI gets counts, release info and the alerts that explain every non-green state.
 type apiState struct {
-	Now             time.Time     `json:"now"`
 	LastRefresh     time.Time     `json:"lastRefresh"`
+	Now             time.Time     `json:"now"`
+	ActionsError    string        `json:"actionsError,omitempty"`
+	Actions         []apiAction   `json:"actions,omitempty"`
 	Repos           []apiRepo     `json:"repos"`
 	Alerts          []apiAlert    `json:"alerts"`
 	Thresholds      apiThresholds `json:"thresholds"`
-	Counts          apiCounts     `json:"counts"`
 	Scan            apiScan       `json:"scan"`
+	Counts          apiCounts     `json:"counts"`
 	IntervalSeconds int64         `json:"intervalSeconds"`
 	Loaded          bool          `json:"loaded"`
 	Refreshing      bool          `json:"refreshing"`
@@ -85,13 +87,14 @@ type apiRelease struct {
 }
 
 type apiAlert struct {
-	Since    time.Time `json:"since"`
-	Repo     string    `json:"repo"`
-	Kind     string    `json:"kind"`
-	Severity string    `json:"severity"`
-	Subject  string    `json:"subject"`
-	Detail   string    `json:"detail"`
-	URL      string    `json:"url"`
+	Since        time.Time                  `json:"since"`
+	ActionStatus map[string]apiActionStatus `json:"actionStatus,omitempty"`
+	Repo         string                     `json:"repo"`
+	Kind         string                     `json:"kind"`
+	Severity     string                     `json:"severity"`
+	Subject      string                     `json:"subject"`
+	Detail       string                     `json:"detail"`
+	URL          string                     `json:"url"`
 }
 
 func seconds(d time.Duration) int64 { return int64(d / time.Second) }

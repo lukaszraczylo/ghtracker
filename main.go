@@ -80,6 +80,10 @@ func run(ctx context.Context, cfgPath string, log *slog.Logger) error {
 	}
 	srv := web.New(coll, promhttp.HandlerFor(reg, promhttp.HandlerOpts{}), ui, *cfg.ManualRefresh, log)
 
+	if len(cfg.Actions) > 0 {
+		srv.WithActions(web.NewActions(cfg.Actions, log, reg))
+	}
+
 	go coll.Run(ctx)
 
 	hs := &http.Server{Addr: cfg.Listen, Handler: srv.Handler(), ReadHeaderTimeout: headerTimeout}
