@@ -1,4 +1,4 @@
-import type { RepoRefreshResult, TrackerState } from './types'
+import type { ActionStatus, RepoRefreshResult, TrackerState } from './types'
 
 export async function fetchState(signal?: AbortSignal): Promise<TrackerState> {
   const res = await fetch('/api/state', { signal, headers: { Accept: 'application/json' } })
@@ -31,4 +31,23 @@ export async function requestRepoRefresh(fullName: string): Promise<RepoRefreshR
     throw new RepoRefreshRefusedError('A refresh is already running. Try again shortly')
   if (!res.ok) throw new Error(`refresh of ${fullName} failed: HTTP ${res.status}`)
   return (await res.json()) as RepoRefreshResult
+}
+
+/** Sends an alert to the webhook behind an action; returns the status the webhook reported, if any. */
+export async function requestAction(
+  id: string,
+  repo: string,
+  url: string,
+): Promise<ActionStatus | null> {
+  const res = await fetch(`/api/actions/${encodeURIComponent(id)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ repo, url }),
+  })
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null
+    throw new Error(body?.error ?? `action ${id} failed: HTTP ${res.status}`)
+  }
+  const status = (await res.json().catch(() => null)) as ActionStatus | null
+  return status && typeof status.state === 'string' ? status : null
 }

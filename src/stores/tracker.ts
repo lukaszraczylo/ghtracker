@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { fetchState, RescanLimitedError, requestRefresh, requestRepoRefresh } from '@/lib/api'
+import {
+  fetchState,
+  RescanLimitedError,
+  requestAction,
+  requestRefresh,
+  requestRepoRefresh,
+} from '@/lib/api'
 import {
   activeFilterCount,
   applyFilters,
@@ -11,7 +17,7 @@ import {
   type Filters,
 } from '@/lib/filters'
 import { DATA_KINDS } from '@/lib/kinds'
-import type { Block, Row, TrackerState } from '@/lib/types'
+import type { ActionStatus, Block, Row, TrackerState } from '@/lib/types'
 
 /** While a rescan runs the server takes ~40s, so check back often instead of every minute. */
 export const SCAN_POLL_MS = 2000
@@ -20,6 +26,9 @@ const SCAN_TIMEOUT_MS = 10 * 60 * 1000
 const SEVERITY_RANK = { ok: 0, warn: 1, crit: 2 } as const
 
 const sinceMs = (since: string) => Date.parse(since) || 0
+
+/** Identifies one action on one alert; the separators cannot occur in an id or a repo name. */
+export const actionKey = (id: string, repo: string, url: string) => `${id}\n${repo}\n${url}`
 
 /** Groups alerts into one row per target URL and one block per unhealthy repo, newest problem first. */
 export function buildBlocks(state: TrackerState): Block[] {
@@ -37,7 +46,12 @@ export function buildBlocks(state: TrackerState): Block[] {
       if (sinceMs(alert.since) > sinceMs(existing.since)) existing.since = alert.since
       continue
     }
+    const actions = (state.actions ?? []).filter(
+      (a) => a.kinds.length === 0 || a.kinds.includes(alert.kind),
+    )
     rows.set(key, {
+      repo: alert.repo,
+      ...(actions.length > 0 && { actions, actionStatus: alert.actionStatus }),
       kind: alert.kind,
       subject: alert.subject,
       detail: alert.detail,
@@ -105,6 +119,10 @@ export const useTrackerStore = defineStore('tracker', () => {
   /** Screen-reader text for a finished single-repository refresh. */
   const announcement = ref('')
   const refreshingRepos = ref<string[]>([])
+  /** Action keys with a request in flight. */
+  const runningActions = ref<string[]>([])
+  /** Status answered by a webhook, shown until the status list reports one. */
+  const localStatus = ref<Record<string, ActionStatus>>({})
   const skewMs = ref(0)
   const tick = ref(Date.now())
 
@@ -209,9 +227,29 @@ export const useTrackerStore = defineStore('tracker', () => {
     }
   }
 
+  /** Sends one alert to an action's webhook, then reloads the state through the existing poll path. */
+  async function runAction(id: string, repo: string, url: string): Promise<void> {
+    const key = actionKey(id, repo, url)
+    if (runningActions.value.includes(key)) return
+    runningActions.value = [...runningActions.value, key]
+    notice.value = ''
+    try {
+      const status = await requestAction(id, repo, url)
+      localStatus.value = { ...localStatus.value, [key]: status ?? { state: 'Requested' } }
+      await load()
+    } catch (e) {
+      notice.value = e instanceof Error ? e.message : String(e)
+    } finally {
+      runningActions.value = runningActions.value.filter((k) => k !== key)
+    }
+  }
+
   return {
     state,
     error,
+    runningActions,
+    localStatus,
+    runAction,
     loading,
     notice,
     announcement,

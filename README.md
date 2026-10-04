@@ -84,7 +84,7 @@ actions:
       token_env: ACTION_TOKEN # name of an environment variable that holds a bearer token; optional
       timeout: 10s
     status_url: https://example.internal/hooks/rerun/status # optional
-    confirm: "Run this action for the selected alert?" # optional; omit for no dialog
+    confirm: 'Run this action for the selected alert?' # optional; omit for no dialog
 ```
 
 - `POST /api/actions/{id}` takes `{"repo": "owner/name", "url": "<alert url>"}`. It refuses cross-site requests like `POST /refresh`. The action must exist, the repository must be in the configured list, and a current alert with that repo and URL must have a kind listed in `kinds`. Otherwise the answer is 404.
@@ -92,6 +92,7 @@ actions:
 - A 2xx answer succeeds. If its body is JSON `{"state", "label", "link"}`, the UI shows it as the status of that alert. A non-2xx answer becomes an error message with the upstream body cut to 300 characters. An unreachable webhook gives 502.
 - `GET /api/state` gains `actions` (`id`, `label`, `confirm`, `kinds`; no URLs and no tokens). When `status_url` is set, the server also fetches it with `GET` (same bearer token) and expects a JSON list of `{"repo", "url", "state", "label", "link"}` rows, newest first. It matches rows to alerts by repo and URL and adds `actionStatus` to each alert, keyed by action id. The result is cached for 10 seconds. If `status_url` is down, the state omits `actionStatus` and sets `actionsError`.
 - A `link` that is not an http or https address is dropped.
+- The dashboard shows one button per action on matching alerts, a confirm dialog when `confirm` is set, and a status chip once a status is known. The chip links to `link` when there is one. The page reads the status on its normal 60-second poll and once right after a press.
 
 ## Metrics
 

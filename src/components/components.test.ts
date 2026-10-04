@@ -125,6 +125,7 @@ describe('AgeMeter', () => {
 
 describe('AttentionRow', () => {
   const row = (over: Partial<Row> = {}): Row => ({
+    repo: 'o/r',
     kind: 'pr_waiting',
     subject: '#5 <b>bold</b> title',
     detail: 'open 9d',

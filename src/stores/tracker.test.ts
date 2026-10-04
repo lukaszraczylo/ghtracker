@@ -329,3 +329,30 @@ describe('tracker store', () => {
     })
   })
 })
+
+describe('runAction', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('shows the server error and keeps no status when the webhook fails', async () => {
+    mockFetch((url) =>
+      url.startsWith('/api/actions/')
+        ? json({ error: 'action webhook answered HTTP 500' }, 500)
+        : json(state()),
+    )
+    const store = useTrackerStore()
+    await store.runAction('rerun', 'o/r', 'u')
+    expect(store.notice).toContain('HTTP 500')
+    expect(store.localStatus).toEqual({})
+    expect(store.runningActions).toEqual([])
+  })
+
+  it('ignores a second press while the first request runs', async () => {
+    const fn = mockFetch((url) =>
+      url.startsWith('/api/actions/') ? json({ state: 'queued' }) : json(state()),
+    )
+    const store = useTrackerStore()
+    await Promise.all([store.runAction('rerun', 'o/r', 'u'), store.runAction('rerun', 'o/r', 'u')])
+    expect(fn.mock.calls.filter(([u]) => u.startsWith('/api/actions/'))).toHaveLength(1)
+  })
+})

@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import AgeMeter from '@/components/AgeMeter.vue'
+import RowActions from '@/components/RowActions.vue'
 import { ageSince, isZeroTime, secondsSince, shorten } from '@/lib/format'
 import { iconFor } from '@/lib/kinds'
 import type { Row } from '@/lib/types'
@@ -33,6 +34,7 @@ const ratio = computed(() => secondsSince(props.row.since, props.nowMs) / props.
       <p class="text-muted-foreground mt-0.5 text-sm wrap-anywhere">
         {{ shorten(row.detail, 120) }}
       </p>
+      <RowActions v-if="row.actions?.length" :row="row" />
     </div>
     <div
       class="col-start-2 flex items-center gap-3 sm:col-start-auto sm:flex-col sm:items-end sm:gap-1.5 sm:pt-0.5"
