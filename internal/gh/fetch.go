@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/lukaszraczylo/ghtracker/internal/model"
@@ -129,8 +130,12 @@ func (c *Client) openPRs(ctx context.Context, full string) ([]model.PullRequest,
 		HTMLURL   string    `json:"html_url"`
 		User      userRef   `json:"user"`
 		Head      struct {
-			SHA string `json:"sha"`
+			Repo *repoRef `json:"repo"`
+			SHA  string   `json:"sha"`
 		} `json:"head"`
+		Base struct {
+			Repo *repoRef `json:"repo"`
+		} `json:"base"`
 		Labels []labelRef `json:"labels"`
 		Number int        `json:"number"`
 		Draft  bool       `json:"draft"`
@@ -141,11 +146,20 @@ func (c *Client) openPRs(ctx context.Context, full string) ([]model.PullRequest,
 	for _, p := range items {
 		out = append(out, model.PullRequest{
 			Number: p.Number, Title: p.Title, URL: p.HTMLURL, Author: p.User.Login, Draft: p.Draft,
-			Labels: labelNames(p.Labels), HeadSHA: p.Head.SHA, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
+			Labels: labelNames(p.Labels), HeadSHA: p.Head.SHA, Fork: isFork(p.Head.Repo, p.Base.Repo), CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
 			Checks: model.CheckSummary{State: model.ChecksUnknown},
 		})
 	}
 	return out, err
+}
+
+type repoRef struct {
+	FullName string `json:"full_name"`
+}
+
+// isFork reports a head repo that differs from the base repo; a deleted head repo counts as a fork.
+func isFork(head, base *repoRef) bool {
+	return head == nil || base == nil || !strings.EqualFold(head.FullName, base.FullName)
 }
 
 // attachChecks fills each PR's check summary; it reports the first failure but still tries every PR.

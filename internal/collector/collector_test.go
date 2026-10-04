@@ -66,19 +66,19 @@ func TestEvaluate(t *testing.T) {
 			r.Workflows = []model.Workflow{{Name: "CI", Latest: model.Run{Status: "queued", CreatedAt: t0.Add(-7 * time.Hour)}}}
 		}, map[string]model.Severity{KindWorkflowStuck: model.Warn}, model.Warn},
 		"pr fresh": {func(r *model.Repo) {
-			r.PRs = []model.PullRequest{{Number: 1, CreatedAt: t0.Add(-47 * time.Hour)}}
+			r.PRs = []model.PullRequest{{Number: 1, Fork: true, CreatedAt: t0.Add(-47 * time.Hour)}}
 		}, map[string]model.Severity{}, model.OK},
 		"pr waiting warn": {func(r *model.Repo) {
-			r.PRs = []model.PullRequest{{Number: 1, CreatedAt: t0.Add(-49 * time.Hour)}}
+			r.PRs = []model.PullRequest{{Number: 1, Fork: true, CreatedAt: t0.Add(-49 * time.Hour)}}
 		}, map[string]model.Severity{KindPRWaiting: model.Warn}, model.Warn},
 		"pr waiting crit": {func(r *model.Repo) {
-			r.PRs = []model.PullRequest{{Number: 1, CreatedAt: t0.Add(-8 * 24 * time.Hour)}}
+			r.PRs = []model.PullRequest{{Number: 1, Fork: true, CreatedAt: t0.Add(-8 * 24 * time.Hour)}}
 		}, map[string]model.Severity{KindPRWaiting: model.Crit}, model.Crit},
 		"draft pr ignored": {func(r *model.Repo) {
 			r.PRs = []model.PullRequest{{Number: 1, Draft: true, CreatedAt: t0.Add(-30 * 24 * time.Hour), Checks: model.CheckSummary{State: model.ChecksFail}}}
 		}, map[string]model.Severity{}, model.OK},
 		"pr checks failing": {func(r *model.Repo) {
-			r.PRs = []model.PullRequest{{Number: 1, CreatedAt: t0, Checks: model.CheckSummary{State: model.ChecksFail, Failing: []string{"build"}}}}
+			r.PRs = []model.PullRequest{{Number: 1, Fork: true, CreatedAt: t0, Checks: model.CheckSummary{State: model.ChecksFail, Failing: []string{"build"}}}}
 		}, map[string]model.Severity{KindPRChecks: model.Warn}, model.Warn},
 		"issues stale aggregated": {func(r *model.Repo) {
 			old := t0.Add(-40 * 24 * time.Hour)
@@ -86,7 +86,7 @@ func TestEvaluate(t *testing.T) {
 		}, map[string]model.Severity{KindIssuesStale: model.Warn}, model.Warn},
 		"archived repo skips work alerts": {func(r *model.Repo) {
 			r.Archived = true
-			r.PRs = []model.PullRequest{{Number: 1, CreatedAt: t0.Add(-30 * 24 * time.Hour)}}
+			r.PRs = []model.PullRequest{{Number: 1, Fork: true, CreatedAt: t0.Add(-30 * 24 * time.Hour)}}
 		}, map[string]model.Severity{}, model.OK},
 	}
 	for name, tt := range tests {
@@ -111,7 +111,7 @@ func TestEvaluate(t *testing.T) {
 }
 
 func TestEvaluateDisabledThresholds(t *testing.T) {
-	r := model.Repo{FullName: "o/r", RefreshedAt: t0, PRs: []model.PullRequest{{Number: 1, CreatedAt: t0.Add(-100 * 24 * time.Hour)}},
+	r := model.Repo{FullName: "o/r", RefreshedAt: t0, PRs: []model.PullRequest{{Number: 1, Fork: true, CreatedAt: t0.Add(-100 * 24 * time.Hour)}},
 		Issues: []model.Issue{{UpdatedAt: t0.Add(-100 * 24 * time.Hour)}}}
 	off := config.Thresholds{PRWarnAfter: -1, PRCritAfter: -1, IssueStaleAfter: -1, WorkflowStuck: -1, DataStaleAfter: -1}
 	if a := Evaluate(&r, t0, off); len(a) != 0 {
@@ -120,7 +120,7 @@ func TestEvaluateDisabledThresholds(t *testing.T) {
 }
 
 func TestAgeAdvancesWithoutRefresh(t *testing.T) {
-	r := model.Repo{FullName: "o/r", RefreshedAt: t0, PRs: []model.PullRequest{{Number: 1, CreatedAt: t0.Add(-40 * time.Hour)}}}
+	r := model.Repo{FullName: "o/r", RefreshedAt: t0, PRs: []model.PullRequest{{Number: 1, Fork: true, CreatedAt: t0.Add(-40 * time.Hour)}}}
 	cfg := th()
 	cfg.DataStaleAfter = -1
 	if a := Evaluate(&r, t0, cfg); len(a) != 0 {
@@ -230,7 +230,7 @@ func TestViewSortsWorstFirstAndAlertsBySeverity(t *testing.T) {
 			c := &model.Run{Status: "completed", Conclusion: "failure"}
 			r.Workflows = []model.Workflow{{Name: "CI", Latest: *c, LastDone: c}}
 		case "o/warn":
-			r.PRs = []model.PullRequest{{Number: 1, CreatedAt: t0.Add(-72 * time.Hour)}}
+			r.PRs = []model.PullRequest{{Number: 1, Fork: true, CreatedAt: t0.Add(-72 * time.Hour)}}
 		}
 		return r, nil
 	}}
@@ -455,5 +455,55 @@ func TestRefreshRepoConcurrentWithFullRefreshAndScheduled(t *testing.T) {
 	wg.Wait()
 	if len(c.View().Repos) != 2 {
 		t.Fatalf("%+v", c.View().Repos)
+	}
+}
+
+func TestEvaluatePROpen(t *testing.T) {
+	pr := func(mut func(*model.PullRequest)) model.PullRequest {
+		p := model.PullRequest{Number: 7, Title: "fix", URL: "https://github.com/o/r/pull/7", Author: "alice", HeadSHA: "abc123", CreatedAt: t0.Add(-5 * time.Hour)}
+		mut(&p)
+		return p
+	}
+	tests := map[string]struct {
+		pr       model.PullRequest
+		archived bool
+		want     bool
+	}{
+		"open":     {pr(func(*model.PullRequest) {}), false, true},
+		"fork":     {pr(func(p *model.PullRequest) { p.Fork = true }), false, false},
+		"draft":    {pr(func(p *model.PullRequest) { p.Draft = true }), false, false},
+		"archived": {pr(func(*model.PullRequest) {}), true, false},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			r := model.Repo{FullName: "o/r", Up: true, RefreshedAt: t0, Archived: tc.archived, PRs: []model.PullRequest{tc.pr}}
+			alerts := Evaluate(&r, t0, th())
+			if r.Health != model.OK {
+				t.Fatalf("health = %v, want ok", r.Health)
+			}
+			if !tc.want {
+				if len(alerts) != 0 {
+					t.Fatalf("alerts = %+v, want none", alerts)
+				}
+				return
+			}
+			want := model.Alert{Severity: model.OK, Repo: "o/r", Kind: KindPROpen, Subject: "#7 fix", Detail: "open for 5h",
+				URL: tc.pr.URL, Ref: "abc123", Author: "alice", Since: tc.pr.CreatedAt}
+			if len(alerts) != 1 || alerts[0] != want {
+				t.Fatalf("alerts = %+v, want [%+v]", alerts, want)
+			}
+		})
+	}
+}
+
+func TestPROpenDoesNotChangeCounts(t *testing.T) {
+	f := &fakeFetcher{fn: func(name string) (model.Repo, error) {
+		return model.Repo{FullName: name, PRs: []model.PullRequest{{Number: 1, HeadSHA: "s", CreatedAt: t0}}}, nil
+	}}
+	c := newCollector(f, "o/a")
+	c.Refresh(context.Background())
+	v := c.View()
+	if len(v.Alerts) != 1 || v.Alerts[0].Kind != KindPROpen || v.Crit != 0 || v.Warn != 0 || v.Repos[0].Health != model.OK {
+		t.Fatalf("view = %+v", v)
 	}
 }

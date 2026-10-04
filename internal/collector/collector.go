@@ -65,6 +65,7 @@ type Collector struct {
 	log         *slog.Logger
 	webBase     string
 	kick        chan struct{}
+	onRefresh   []func(context.Context, View)
 	names       []string
 	th          config.Thresholds
 	interval    time.Duration
@@ -100,16 +101,30 @@ func New(f Fetcher, cfg *config.Config, log *slog.Logger) *Collector {
 func (c *Collector) Run(ctx context.Context) {
 	t := time.NewTicker(c.interval)
 	defer t.Stop()
-	c.Refresh(ctx)
+	c.refreshAndNotify(ctx)
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			c.Refresh(ctx)
+			c.refreshAndNotify(ctx)
 		case <-c.kick:
-			c.Refresh(ctx)
+			c.refreshAndNotify(ctx)
 		}
+	}
+}
+
+// OnRefresh registers fn to run after every scan started by Run; call it before Run.
+func (c *Collector) OnRefresh(fn func(context.Context, View)) { c.onRefresh = append(c.onRefresh, fn) }
+
+func (c *Collector) refreshAndNotify(ctx context.Context) {
+	c.Refresh(ctx)
+	if len(c.onRefresh) == 0 || ctx.Err() != nil {
+		return
+	}
+	v := c.View()
+	for _, fn := range c.onRefresh {
+		fn(ctx, v)
 	}
 }
 

@@ -20,6 +20,8 @@ const (
 	KindPRWaiting     = "pr_waiting"
 	KindPRChecks      = "pr_checks_failing"
 	KindIssuesStale   = "issues_stale"
+	// KindPROpen is informational plumbing for automatic actions; it has OK severity so it never moves health or counts.
+	KindPROpen = "pr_open"
 )
 
 // Evaluate derives alerts for one repo at time now and stores the worst severity in r.Health.
@@ -62,6 +64,10 @@ func Evaluate(r *model.Repo, now time.Time, th config.Thresholds) []model.Alert 
 		}
 		age := now.Sub(pr.CreatedAt)
 		subject := fmt.Sprintf("#%d %s", pr.Number, pr.Title)
+		if !pr.Fork {
+			alerts = append(alerts, model.Alert{Severity: model.OK, Repo: r.FullName, Kind: KindPROpen, Subject: subject,
+				Detail: "open for " + Age(age), URL: pr.URL, Ref: pr.HeadSHA, Author: pr.Author, Since: pr.CreatedAt})
+		}
 		switch {
 		case th.PRCritAfter > 0 && age >= th.PRCritAfter:
 			add(model.Crit, KindPRWaiting, subject, "open "+Age(age), pr.URL, pr.CreatedAt)

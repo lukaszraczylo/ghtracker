@@ -177,6 +177,8 @@ func TestActionsFinalize(t *testing.T) {
 		"status url ok":    {mutate: func(a *Action) { a.StatusURL = "http://status.example.test/s" }},
 		"negative timeout": {mutate: func(a *Action) { a.Webhook.Timeout = -time.Second }, wantErr: true},
 		"token env unset":  {mutate: func(a *Action) { a.Webhook.TokenEnv = "MISSING" }, wantErr: true},
+		"auto with kinds":  {mutate: func(a *Action) { a.Auto, a.Kinds = true, []string{"pr_open"} }},
+		"auto no kinds":    {mutate: func(a *Action) { a.Auto = true }, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -219,5 +221,26 @@ func TestActionAppliesTo(t *testing.T) {
 		if got := (Action{Kinds: tc.kinds}).AppliesTo(tc.kind); got != tc.want {
 			t.Errorf("%v.AppliesTo(%q) = %v", tc.kinds, tc.kind, got)
 		}
+	}
+}
+
+func TestActionAuthorAllowed(t *testing.T) {
+	tests := map[string]struct {
+		author  string
+		authors []string
+		want    bool
+	}{
+		"no filter":        {"anyone", nil, true},
+		"listed":           {"alice", []string{"alice"}, true},
+		"case-insensitive": {"aLICE", []string{"Alice"}, true},
+		"unlisted":         {"bob", []string{"alice"}, false},
+		"empty author":     {"", []string{"alice"}, false},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := (Action{Authors: tc.authors}).AuthorAllowed(tc.author); got != tc.want {
+				t.Fatalf("AuthorAllowed(%q) = %v, want %v", tc.author, got, tc.want)
+			}
+		})
 	}
 }

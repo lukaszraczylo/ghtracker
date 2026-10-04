@@ -94,6 +94,29 @@ actions:
 - A `link` that is not an http or https address is dropped.
 - The dashboard shows one button per action on matching alerts, a confirm dialog when `confirm` is set, and a status chip once a status is known. The chip links to `link` when there is one. The page reads the status on its normal 60-second poll and once right after a press.
 
+### Automatic actions
+
+An action with `auto: true` fires without a click. After every scan, and once at startup, the server sends the webhook for each current alert whose kind is in `kinds`. It sends once per action, repo, alert URL and head commit. A new commit on a pull request is a new send.
+
+```yaml
+actions:
+  - id: review
+    label: Review
+    kinds: [pr_open] # required when auto is true
+    auto: true
+    authors: [lukaszraczylo, dependabot[bot]] # optional; case-insensitive; empty means any author
+    webhook:
+      url: https://example.internal/hooks/review
+      token_env: ACTION_TOKEN
+```
+
+- `pr_open` is an informational alert kind. It exists for each open, non-draft pull request from the same repository (not a fork) in a non-archived repo. `subject` is `#N title`, `url` is the pull request, `ref` is the head commit SHA and `detail` is `open for <age>`. It has severity `ok`: it never changes repo health, the counts, the metrics or the dashboard, and the UI hides it. It is in the `alerts` array of `GET /api/state`, which gains an optional `ref` field on every alert.
+- `authors` limits auto sends to alerts that carry an author, which today means `pr_open`. Without `authors`, any alert of a listed kind fires.
+- The webhook request is the same as for a button press, plus `alert.ref` when the alert has one.
+- The server keeps the sent set in memory and drops an entry when its alert disappears, so a restart sends again for every open pull request. A failed send is not recorded and retries on the next scan. That covers a network error, a non-2xx answer and a `409` (the consumer is busy). Any other 2xx answer counts as sent.
+- A scan makes at most 5 auto sends, in order, so a first start cannot flood the webhook. The rest follow on later scans.
+- `action_requests_total` counts auto sends with the results `auto_ok`, `auto_rejected` (4xx), `auto_error` (network error or 5xx) and `auto_busy` (409).
+
 ## Metrics
 
 All metrics use the `ghtracker_` prefix. Gauges are computed at scrape time.
@@ -108,7 +131,7 @@ All metrics use the `ghtracker_` prefix. Gauges are computed at scrape time.
 | `release_info`, `release_published_timestamp_seconds`                                                          | repo, version, url         |
 | `alerts`                                                                                                       | severity                   |
 | `refreshes_total`, `repo_refresh_errors_total`, `last_refresh_duration_seconds`, `github_rate_limit_remaining` | none                       |
-| `action_requests_total` (counter; result is `ok`, `rejected` or `error`; only with `actions`)                  | action, result             |
+| `action_requests_total` (counter; result is `ok`, `rejected` or `error`, plus `auto_*` for auto actions; only with `actions`)                  | action, result             |
 
 Example alert rules:
 

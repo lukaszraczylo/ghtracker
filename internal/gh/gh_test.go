@@ -553,3 +553,29 @@ func TestFreshClientDisablesConnectionReuse(t *testing.T) {
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestOpenPRsHeadSHAAndFork(t *testing.T) {
+	tests := map[string]struct {
+		pr       string
+		wantFork bool
+	}{
+		"same repo":        {`"head":{"sha":"abc","repo":{"full_name":"o/r"}},"base":{"repo":{"full_name":"o/r"}}`, false},
+		"same repo casing": {`"head":{"sha":"abc","repo":{"full_name":"O/R"}},"base":{"repo":{"full_name":"o/r"}}`, false},
+		"other repo":       {`"head":{"sha":"abc","repo":{"full_name":"x/r"}},"base":{"repo":{"full_name":"o/r"}}`, true},
+		"deleted head":     {`"head":{"sha":"abc","repo":null},"base":{"repo":{"full_name":"o/r"}}`, true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			f := newFake(t)
+			c := f.client(t, 50)
+			f.json("/repos/o/r/pulls", `[{"number":2,"title":"t","html_url":"u2","user":{"login":"b"},`+tc.pr+`}]`)
+			prs, err := c.openPRs(context.Background(), "o/r")
+			if err != nil || len(prs) != 1 {
+				t.Fatalf("prs = %+v, err = %v", prs, err)
+			}
+			if prs[0].HeadSHA != "abc" || prs[0].Fork != tc.wantFork {
+				t.Fatalf("HeadSHA = %q, Fork = %v, want abc, %v", prs[0].HeadSHA, prs[0].Fork, tc.wantFork)
+			}
+		})
+	}
+}

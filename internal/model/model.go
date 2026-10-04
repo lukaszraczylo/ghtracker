@@ -90,6 +90,8 @@ type PullRequest struct {
 	Checks    CheckSummary
 	Number    int
 	Draft     bool
+	// Fork is true when the head repository differs from the base or was deleted.
+	Fork bool
 }
 
 type CheckSummary struct {
@@ -133,12 +135,16 @@ func (r Run) Failed() bool {
 }
 
 type Alert struct {
-	Since    time.Time
-	Repo     string
-	Kind     string
-	Subject  string
-	Detail   string
-	URL      string
+	Since   time.Time
+	Repo    string
+	Kind    string
+	Subject string
+	Detail  string
+	URL     string
+	// Ref is the head commit of a pr_open alert; empty for other kinds.
+	Ref string
+	// Author is the pull request author of a pr_open alert; it is not part of the JSON API.
+	Author   string
 	Severity Severity
 }
 

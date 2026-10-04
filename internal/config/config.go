@@ -45,6 +45,23 @@ type Action struct {
 	Webhook Webhook `yaml:"webhook"`
 	// Kinds limits the action to these alert kinds; empty means every kind.
 	Kinds []string `yaml:"kinds"`
+	// Authors limits auto firing to pull requests by these logins, case-insensitive; empty means anyone.
+	Authors []string `yaml:"authors"`
+	// Auto fires the webhook without a click, once per alert and head commit; it requires Kinds.
+	Auto bool `yaml:"auto"`
+}
+
+// AuthorAllowed reports whether auto firing accepts a pull request author.
+func (a Action) AuthorAllowed(author string) bool {
+	if len(a.Authors) == 0 {
+		return true
+	}
+	for _, x := range a.Authors {
+		if strings.EqualFold(x, author) {
+			return true
+		}
+	}
+	return false
 }
 
 type Webhook struct {
@@ -195,6 +212,9 @@ func finalizeActions(actions []Action, getenv func(string) string) error {
 		}
 		if a.StatusURL != "" && !isHTTPURL(a.StatusURL) {
 			return fmt.Errorf("actions[%s].status_url %q must be an http or https address", a.ID, a.StatusURL)
+		}
+		if a.Auto && len(a.Kinds) == 0 {
+			return fmt.Errorf("actions[%s].auto requires a non-empty kinds list", a.ID)
 		}
 		if a.Webhook.Timeout < 0 {
 			return fmt.Errorf("actions[%s].webhook.timeout must not be negative", a.ID)

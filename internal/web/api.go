@@ -95,6 +95,7 @@ type apiAlert struct {
 	Subject      string                     `json:"subject"`
 	Detail       string                     `json:"detail"`
 	URL          string                     `json:"url"`
+	Ref          string                     `json:"ref,omitempty"`
 }
 
 func seconds(d time.Duration) int64 { return int64(d / time.Second) }
@@ -133,7 +134,7 @@ func buildState(v collector.View, manualRefresh bool) apiState {
 	for _, a := range v.Alerts {
 		st.Alerts = append(st.Alerts, apiAlert{
 			Severity: a.Severity.String(), Repo: a.Repo, Kind: a.Kind, Subject: a.Subject,
-			Detail: a.Detail, URL: a.URL, Since: a.Since,
+			Detail: a.Detail, URL: a.URL, Ref: a.Ref, Since: a.Since,
 		})
 	}
 	return st

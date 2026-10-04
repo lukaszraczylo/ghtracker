@@ -25,6 +25,13 @@ thresholds: # negative disables a check
 #       timeout: 10s
 #     status_url: https://example.internal/hooks/rerun/status # optional
 #     confirm: "Run this action for the selected alert?" # optional; omit for no dialog
+#   - id: review
+#     kinds: [pr_open] # required with auto; one alert per open, non-draft, non-fork PR
+#     auto: true # fire without a click, once per repo, PR and head commit
+#     authors: [lukaszraczylo] # optional; case-insensitive; omit for any author
+#     webhook:
+#       url: https://example.internal/hooks/review
+#       token_env: ACTION_TOKEN
 
 max_items: 100 # per repo, issues and PRs
 concurrency: 2

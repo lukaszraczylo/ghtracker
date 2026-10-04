@@ -29,6 +29,10 @@ const (
 	resultOK          = "ok"
 	resultRejected    = "rejected"
 	resultFailed      = "error"
+	resultAutoOK      = "auto_ok"
+	resultAutoBusy    = "auto_busy"
+	resultAutoRefused = "auto_rejected"
+	resultAutoFailed  = "auto_error"
 	actionMetricName  = "action_requests_total"
 	contentTypeHeader = "Content-Type"
 )
@@ -92,6 +96,11 @@ func NewActions(cfgs []config.Action, log *slog.Logger, reg prometheus.Registere
 		a.byID[c.ID] = rt
 		for _, r := range []string{resultOK, resultRejected, resultFailed} {
 			a.counter.WithLabelValues(c.ID, r)
+		}
+		if c.Auto {
+			for _, r := range []string{resultAutoOK, resultAutoBusy, resultAutoRefused, resultAutoFailed} {
+				a.counter.WithLabelValues(c.ID, r)
+			}
 		}
 	}
 	if reg != nil {
@@ -221,6 +230,7 @@ type webhookAlert struct {
 	Subject  string    `json:"subject"`
 	Detail   string    `json:"detail"`
 	URL      string    `json:"url"`
+	Ref      string    `json:"ref,omitempty"`
 }
 
 type webhookPayload struct {
@@ -250,11 +260,7 @@ func (s *Server) runAction(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, code, msg)
 		return
 	}
-	status, body, err := s.actions.post(r.Context(), rt.cfg, webhookPayload{
-		Action: rt.cfg.ID, RequestedAt: s.now().UTC(),
-		Alert: webhookAlert{Repo: alert.Repo, Kind: alert.Kind, Severity: alert.Severity.String(), Subject: alert.Subject,
-			Detail: alert.Detail, URL: alert.URL, Since: alert.Since},
-	})
+	status, body, err := s.actions.post(r.Context(), rt.cfg, newWebhookPayload(rt.cfg.ID, alert, s.now()))
 	if err != nil {
 		s.actions.count(rt.cfg.ID, resultFailed)
 		s.log.Warn("action webhook failed", "action", rt.cfg.ID, "repo", alert.Repo, "err", err)
@@ -284,6 +290,14 @@ func (s *Server) runAction(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(cleanStatus(st))
+}
+
+func newWebhookPayload(id string, a model.Alert, at time.Time) webhookPayload {
+	return webhookPayload{
+		Action: id, RequestedAt: at.UTC(),
+		Alert: webhookAlert{Repo: a.Repo, Kind: a.Kind, Severity: a.Severity.String(), Subject: a.Subject,
+			Detail: a.Detail, URL: a.URL, Ref: a.Ref, Since: a.Since},
+	}
 }
 
 // findAlert returns the current alert a request targets, or a status and message when it has none.
