@@ -119,10 +119,13 @@ func (c *Collector) OnRefresh(fn func(context.Context, View)) { c.onRefresh = ap
 
 func (c *Collector) refreshAndNotify(ctx context.Context) {
 	c.Refresh(ctx)
-	if len(c.onRefresh) == 0 || ctx.Err() != nil {
+	if ctx.Err() != nil {
 		return
 	}
-	v := c.View()
+	c.notify(ctx, c.View())
+}
+
+func (c *Collector) notify(ctx context.Context, v View) {
 	for _, fn := range c.onRefresh {
 		fn(ctx, v)
 	}
@@ -239,7 +242,12 @@ func (c *Collector) RefreshRepo(ctx context.Context, name string) (View, error) 
 	c.mu.Lock()
 	c.repos[canon] = r
 	c.mu.Unlock()
-	return c.View(), nil
+	v := c.View()
+	if len(c.onRefresh) > 0 {
+		// The request context ends with the response, which must not wait for webhooks.
+		go c.notify(context.WithoutCancel(ctx), v)
+	}
+	return v, nil
 }
 
 func (c *Collector) configured(name string) (string, bool) {

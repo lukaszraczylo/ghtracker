@@ -96,7 +96,7 @@ actions:
 
 ### Automatic actions
 
-An action with `auto: true` fires without a click. After every scan, and once at startup, the server sends the webhook for each current alert whose kind is in `kinds`. It sends once per action, repo, alert URL and head commit. A new commit on a pull request is a new send.
+An action with `auto: true` fires without a click. After every scan, after every single-repository rescan, and once at startup, the server sends the webhook for each current alert whose kind is in `kinds`. It sends once per action, repo, alert URL and head commit. A new commit on a pull request is a new send.
 
 ```yaml
 actions:

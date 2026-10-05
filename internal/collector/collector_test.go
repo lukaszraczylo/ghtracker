@@ -519,3 +519,37 @@ func TestPROpenDoesNotChangeCounts(t *testing.T) {
 		t.Fatalf("view = %+v", v)
 	}
 }
+
+func TestRefreshRepoRunsRefreshHooksWithTheNewView(t *testing.T) {
+	f := &fakeFetcher{fn: func(name string) (model.Repo, error) {
+		return model.Repo{FullName: name, URL: "u", Issues: make([]model.Issue, 3)}, nil
+	}}
+	c := newCollector(f, "o/a")
+	got := make(chan View, 1)
+	c.OnRefresh(func(_ context.Context, v View) { got <- v })
+	if _, err := c.RefreshRepo(context.Background(), "o/a"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case v := <-got:
+		if len(v.Repos) != 1 || len(v.Repos[0].Issues) != 3 {
+			t.Fatalf("hook saw a stale view: %+v", v.Repos)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("refresh hook did not run after a repository refresh")
+	}
+}
+
+func TestRefreshRepoFailureSkipsRefreshHooks(t *testing.T) {
+	c := newCollector(&fakeFetcher{fn: func(string) (model.Repo, error) { return model.Repo{}, errors.New("nope") }}, "o/a")
+	called := make(chan struct{}, 1)
+	c.OnRefresh(func(context.Context, View) { called <- struct{}{} })
+	if _, err := c.RefreshRepo(context.Background(), "unknown/x"); err == nil {
+		t.Fatal("unknown repository must fail")
+	}
+	select {
+	case <-called:
+		t.Fatal("hook ran for a refused refresh")
+	case <-time.After(200 * time.Millisecond):
+	}
+}
