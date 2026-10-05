@@ -116,7 +116,7 @@ onBeforeUnmount(() => {
         />
       </div>
       <div
-        class="mt-10 grid grid-cols-[minmax(0,1fr)] gap-x-10 gap-y-10 sm:mt-14 lg:grid-cols-[minmax(0,1fr)_24rem] 2xl:grid-cols-[minmax(0,1fr)_28rem]"
+        class="mt-10 grid grid-cols-[minmax(0,1fr)] gap-x-10 gap-y-10 sm:mt-14 xl:grid-cols-[minmax(0,1fr)_24rem] 2xl:grid-cols-[minmax(0,1fr)_28rem]"
       >
         <AttentionList
           ref="list"
@@ -133,7 +133,7 @@ onBeforeUnmount(() => {
           @clear="store.clearFilters()"
           @refresh="store.refreshRepo"
         />
-        <aside class="lg:sticky lg:top-6 lg:self-start">
+        <aside class="xl:sticky xl:top-6 xl:self-start">
           <ProjectList
             :repos="visibleRepos"
             :total="state.repos.length"

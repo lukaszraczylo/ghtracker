@@ -89,7 +89,7 @@ const LABEL = { crit: 'Critical', warn: 'Warning', ok: 'Healthy' } as const
     <ul
       v-else
       ref="scroller"
-      class="border-border bg-surface divide-border max-h-[70vh] divide-y overflow-y-auto rounded-lg border [scrollbar-color:var(--border)_transparent] [scrollbar-width:thin] lg:max-h-[calc(100vh-7rem)]"
+      class="border-border bg-surface divide-border max-h-[70vh] divide-y overflow-y-auto rounded-lg border [scrollbar-color:var(--border)_transparent] [scrollbar-width:thin] xl:max-h-[calc(100vh-7rem)]"
     >
       <li
         v-for="repo in visible"
