@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -405,5 +406,17 @@ func TestRedirectDoesNotForwardToken(t *testing.T) {
 	}
 	if leaked.Load() {
 		t.Fatal("bearer token forwarded across a redirect")
+	}
+}
+
+func TestStatusFetchSurvivesCancelledRequest(t *testing.T) {
+	fh := newFakeHook(t)
+	fh.statBody = `[{"repo":"o/r","url":"` + alertURL + `","state":"running"}]`
+	h := newActionServer(t, nil, fh.srv.URL)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	rows, err := h.actions.statusRows(ctx, h.actions.list[0])
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("rows=%d err=%v, want the fetch to complete despite the cancelled request", len(rows), err)
 	}
 }

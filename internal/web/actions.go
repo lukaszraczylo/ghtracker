@@ -158,7 +158,8 @@ func (a *Actions) statusRows(ctx context.Context, rt *actionRuntime) (map[alertR
 	if !rt.fetched.IsZero() && a.now().Sub(rt.fetched) < statusCacheTTL {
 		return rt.rows, rt.err
 	}
-	rows, err := a.fetchStatus(ctx, rt.cfg)
+	// A client that disconnects mid-request must not fail the fetch that every later request reuses.
+	rows, err := a.fetchStatus(context.WithoutCancel(ctx), rt.cfg)
 	if err != nil {
 		a.log.Warn("action status unavailable", "action", rt.cfg.ID, "err", err)
 	}
