@@ -553,3 +553,34 @@ func TestRefreshRepoFailureSkipsRefreshHooks(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 	}
 }
+
+func TestRefreshPublishesEachRepoBeforeTheScanEnds(t *testing.T) {
+	release := make(chan struct{})
+	f := &fakeFetcher{fn: func(name string) (model.Repo, error) {
+		if name == "o/slow" {
+			<-release
+		}
+		return model.Repo{FullName: name, Err: ""}, nil
+	}}
+	cfg := &config.Config{Repos: []string{"o/fast", "o/slow"}, RefreshInterval: time.Hour, Concurrency: 2, Thresholds: th()}
+	c := New(f, cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	c.now = func() time.Time { return t0 }
+	done := make(chan struct{})
+	go func() { c.Refresh(context.Background()); close(done) }()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if v := c.View(); len(v.Repos) == 1 && v.Repos[0].FullName == "o/fast" {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	v := c.View()
+	if len(v.Repos) != 1 || v.Repos[0].FullName != "o/fast" || !v.Refreshing || v.Loaded {
+		t.Fatalf("mid-scan view: repos=%d refreshing=%v loaded=%v", len(v.Repos), v.Refreshing, v.Loaded)
+	}
+	close(release)
+	<-done
+	if v := c.View(); len(v.Repos) != 2 || !v.Loaded {
+		t.Fatalf("after scan: repos=%d loaded=%v", len(v.Repos), v.Loaded)
+	}
+}

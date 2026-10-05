@@ -155,25 +155,25 @@ func (c *Collector) Refresh(ctx context.Context) {
 	c.limited.Store(false)
 	c.scanDone.Store(0)
 	c.scanTotal.Store(int64(len(c.names)))
-	results := make([]model.Repo, len(c.names))
 	sem := make(chan struct{}, c.concurrency)
 	var wg sync.WaitGroup
-	for i, name := range c.names {
+	for _, name := range c.names {
 		wg.Add(1)
 		sem <- struct{}{}
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
-			results[i] = c.refreshOne(ctx, name, start, true)
+			r := c.refreshOne(ctx, name, start, true)
+			// Publish per repo so a running scan shows new and resolved alerts as they land.
+			c.mu.Lock()
+			c.repos[r.FullName] = r
+			c.mu.Unlock()
 			c.scanDone.Add(1)
 		}()
 	}
 	wg.Wait()
 
 	c.mu.Lock()
-	for _, r := range results {
-		c.repos[r.FullName] = r
-	}
 	c.lastRefresh = start
 	c.lastDur = c.now().Sub(start)
 	c.loaded = true
