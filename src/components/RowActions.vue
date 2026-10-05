@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { faSpinner } from '@fortawesome/free-solid-svg-icons'
+import { faScrewdriverWrench, faSpinner } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import {
   AlertDialog,
@@ -44,14 +44,18 @@ function press(a: ActionDef): void {
   <div class="mt-2 flex flex-wrap items-center gap-2" data-test="row-actions">
     <template v-for="a in row.actions" :key="a.id">
       <Button
-        variant="outline"
-        size="xs"
+        size="sm"
+        class="font-semibold shadow-sm"
         :disabled="busy(a)"
         :aria-busy="busy(a)"
         :data-test="`action-${a.id}`"
         @click="press(a)"
       >
-        <FontAwesomeIcon v-if="busy(a)" :icon="faSpinner" spin aria-hidden="true" />
+        <FontAwesomeIcon
+          :icon="busy(a) ? faSpinner : faScrewdriverWrench"
+          :spin="busy(a)"
+          aria-hidden="true"
+        />
         {{ a.label }}
       </Button>
       <Badge v-if="busy(a)" variant="secondary" data-test="action-status">Sending</Badge>
