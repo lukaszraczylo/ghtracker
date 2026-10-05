@@ -461,12 +461,12 @@ func TestAPIErrorMessageParsing(t *testing.T) {
 }
 
 // staleThenFresh models GitHub answering one exact query from an old cached result: the plain
-// query returns an old failing run every time, and the same query with page=1 returns current runs.
+// query returns an old failing run every time, and the same query with a created filter returns current runs.
 func staleThenFresh(f *fakeGitHub, path string) *atomic.Int64 {
 	var calls atomic.Int64
 	f.routes[path] = func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
-		if r.URL.Query().Get("page") == "" {
+		if r.URL.Query().Get("created") == "" {
 			_, _ = w.Write([]byte(`{"workflow_runs":[
 			  {"id":1,"html_url":"old","event":"schedule","head_branch":"main","status":"completed","conclusion":"failure","created_at":"2026-09-11T03:02:00Z"}]}`))
 			return
