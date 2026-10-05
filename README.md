@@ -110,7 +110,7 @@ actions:
       token_env: ACTION_TOKEN
 ```
 
-- `pr_open` is an informational alert kind. It exists for each open, non-draft pull request from the same repository (not a fork) in a non-archived repo. `subject` is `#N title`, `url` is the pull request, `ref` is the head commit SHA and `detail` is `open for <age>`. It has severity `ok`: it never changes repo health, the counts, the metrics or the dashboard, and the UI hides it. It is in the `alerts` array of `GET /api/state`, which gains an optional `ref` field on every alert.
+- `pr_open` is an informational alert kind. It exists for each open, non-draft pull request including pull requests from forks, in a non-archived repo. Fork pull requests come from external contributors, so a consumer of these alerts, including an auto action webhook, must treat them as untrusted input. `subject` is `#N title`, `url` is the pull request, `ref` is the head commit SHA and `detail` is `open for <age>`. It has severity `ok`: it never changes repo health, the counts, the metrics or the dashboard, and the UI hides it. It is in the `alerts` array of `GET /api/state`, which gains an optional `ref` field on every alert.
 - `authors` limits auto sends to alerts that carry an author, which today means `pr_open`. Without `authors`, any alert of a listed kind fires.
 - The webhook request is the same as for a button press, plus `alert.ref` when the alert has one.
 - The server keeps the sent set in memory and drops an entry when its alert disappears, so a restart sends again for every open pull request. A failed send is not recorded and retries on the next scan. That covers a network error, a non-2xx answer and a `409` (the consumer is busy). Any other 2xx answer counts as sent.

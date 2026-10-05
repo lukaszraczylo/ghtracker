@@ -43,7 +43,10 @@ func TestAutoRunner(t *testing.T) {
 		authors []string
 		steps   []autoStep
 	}{
-		"fork skipped":  {steps: []autoStep{{[]model.PullRequest{autoPR(1, "a", "x", fork)}, 200, 0}}},
+		"fork triggers once per sha": {steps: []autoStep{
+			{[]model.PullRequest{autoPR(1, "a", "x", fork)}, 200, 1},
+			{[]model.PullRequest{autoPR(1, "a", "x", fork)}, 200, 0},
+		}},
 		"draft skipped": {steps: []autoStep{{[]model.PullRequest{autoPR(1, "a", "x", draft)}, 200, 0}}},
 		"author filter": {authors: []string{"Alice"}, steps: []autoStep{
 			{[]model.PullRequest{autoPR(1, "a", "bob", nil), autoPR(2, "b", "alice", nil)}, 200, 1},

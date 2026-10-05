@@ -93,7 +93,7 @@ func TestEvaluate(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			r := fresh()
 			tt.mutate(&r)
-			alerts := Evaluate(&r, t0, th())
+			alerts := withoutPROpen(Evaluate(&r, t0, th()))
 			got := kinds(alerts)
 			if len(got) != len(tt.want) {
 				t.Fatalf("alerts = %+v, want kinds %v", alerts, tt.want)
@@ -110,11 +110,22 @@ func TestEvaluate(t *testing.T) {
 	}
 }
 
+// withoutPROpen drops the informational pr_open alerts so tests of other kinds stay focused.
+func withoutPROpen(in []model.Alert) []model.Alert {
+	var out []model.Alert
+	for _, a := range in {
+		if a.Kind != KindPROpen {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
 func TestEvaluateDisabledThresholds(t *testing.T) {
 	r := model.Repo{FullName: "o/r", RefreshedAt: t0, PRs: []model.PullRequest{{Number: 1, Fork: true, CreatedAt: t0.Add(-100 * 24 * time.Hour)}},
 		Issues: []model.Issue{{UpdatedAt: t0.Add(-100 * 24 * time.Hour)}}}
 	off := config.Thresholds{PRWarnAfter: -1, PRCritAfter: -1, IssueStaleAfter: -1, WorkflowStuck: -1, DataStaleAfter: -1}
-	if a := Evaluate(&r, t0, off); len(a) != 0 {
+	if a := withoutPROpen(Evaluate(&r, t0, off)); len(a) != 0 {
 		t.Fatalf("disabled checks produced %+v", a)
 	}
 }
@@ -123,10 +134,10 @@ func TestAgeAdvancesWithoutRefresh(t *testing.T) {
 	r := model.Repo{FullName: "o/r", RefreshedAt: t0, PRs: []model.PullRequest{{Number: 1, Fork: true, CreatedAt: t0.Add(-40 * time.Hour)}}}
 	cfg := th()
 	cfg.DataStaleAfter = -1
-	if a := Evaluate(&r, t0, cfg); len(a) != 0 {
+	if a := withoutPROpen(Evaluate(&r, t0, cfg)); len(a) != 0 {
 		t.Fatalf("unexpected %+v", a)
 	}
-	if a := Evaluate(&r, t0.Add(10*time.Hour), cfg); len(a) != 1 || a[0].Severity != model.Warn {
+	if a := withoutPROpen(Evaluate(&r, t0.Add(10*time.Hour), cfg)); len(a) != 1 || a[0].Severity != model.Warn {
 		t.Fatalf("PR must cross the warn threshold as time passes: %+v", a)
 	}
 }
@@ -240,7 +251,8 @@ func TestViewSortsWorstFirstAndAlertsBySeverity(t *testing.T) {
 	if v.Repos[0].FullName != "o/crit" || v.Repos[1].FullName != "o/warn" || v.Repos[2].FullName != "o/ok" {
 		t.Fatalf("order: %s %s %s", v.Repos[0].FullName, v.Repos[1].FullName, v.Repos[2].FullName)
 	}
-	if len(v.Alerts) != 2 || v.Alerts[0].Severity != model.Crit || v.Crit != 1 || v.Warn != 1 {
+	alerts := withoutPROpen(v.Alerts)
+	if len(alerts) != 2 || alerts[0].Severity != model.Crit || v.Crit != 1 || v.Warn != 1 {
 		t.Fatalf("alerts: %+v", v.Alerts)
 	}
 }
@@ -470,7 +482,7 @@ func TestEvaluatePROpen(t *testing.T) {
 		want     bool
 	}{
 		"open":     {pr(func(*model.PullRequest) {}), false, true},
-		"fork":     {pr(func(p *model.PullRequest) { p.Fork = true }), false, false},
+		"fork":     {pr(func(p *model.PullRequest) { p.Fork = true }), false, true},
 		"draft":    {pr(func(p *model.PullRequest) { p.Draft = true }), false, false},
 		"archived": {pr(func(*model.PullRequest) {}), true, false},
 	}
