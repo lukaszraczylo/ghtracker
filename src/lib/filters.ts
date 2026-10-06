@@ -24,7 +24,7 @@ export const emptyFilters = (): Filters => ({
 export function kindGroup(kind: string): KindGroup {
   if (kind.startsWith('workflow_')) return 'workflow'
   if (kind.startsWith('pr_')) return 'pr'
-  if (kind === 'issues_stale') return 'issue'
+  if (kind.startsWith('issue_')) return 'issue'
   return 'data'
 }
 

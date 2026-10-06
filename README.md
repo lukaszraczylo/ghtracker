@@ -17,11 +17,11 @@ Release archives and the image checksums are signed with cosign.
 The dashboard lists only what needs attention, grouped by project. The project with the newest problem comes first:
 
 - Failing workflows, including scheduled and other background ones, with a link to the run.
-- Pull requests that wait too long or fail their checks, with links and age.
-- Stale issues, as one line per project.
+- Pull requests, one line each: new ones (`pr_fresh`), ones that wait too long (`pr_waiting`) and ones that fail their checks.
+- Open issues, one line each: new ones (`issue_fresh`) and ones without recent activity (`issue_stale`).
 - Projects that failed to refresh, or loaded only in part.
 
-A side panel lists every project with its latest release (or newest tag), a link to the release, and counts of workflows, open pull requests and issues. Healthy items do not appear anywhere else.
+A side panel lists every project with its latest release (or newest tag), a link to the release, and counts of workflows, open pull requests and issues. Every open non-draft pull request and every open issue raises a warning, so a project with open work is never green.
 
 ### Search and filters
 
@@ -48,7 +48,9 @@ A side panel lists every project with its latest release (or newest tag), a link
 | Non-draft PR open longer than `pr_warn_after`                                            | warn     |
 | PR checks failing                                                                        | warn     |
 | Workflow queued or running longer than `workflow_stuck_after`                            | warn     |
-| Open issues without activity for `issue_stale_after` (one alert per repo)                | warn     |
+| Non-draft PR open less than `pr_warn_after` (`pr_fresh`)                                 | warn     |
+| Open issue without activity for `issue_stale_after` (`issue_stale`, one alert per issue) | warn     |
+| Open issue with recent activity (`issue_fresh`, one alert per issue)                     | warn     |
 | A section failed to load, for example a missing App permission                           | warn     |
 | Data older than `data_stale_after`                                                       | warn     |
 
@@ -121,17 +123,17 @@ actions:
 
 All metrics use the `ghtracker_` prefix. Gauges are computed at scrape time.
 
-| Metric                                                                                                         | Labels                     |
-| -------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| `repo_up`, `repo_health` (0 ok, 1 warn, 2 crit)                                                                | repo                       |
-| `repo_open_issues`, `repo_open_prs`, `repo_open_prs_failing_checks`, `repo_stale_issues`                       | repo                       |
-| `repo_oldest_pr_age_seconds`, `repo_last_refresh_timestamp_seconds`                                            | repo                       |
-| `pr_age_seconds`, `pr_checks_failing`                                                                          | repo, number               |
-| `workflow_failing`, `workflow_running`, `workflow_last_run_timestamp_seconds`                                  | repo, workflow, background |
-| `release_info`, `release_published_timestamp_seconds`                                                          | repo, version, url         |
-| `alerts`                                                                                                       | severity                   |
-| `refreshes_total`, `repo_refresh_errors_total`, `last_refresh_duration_seconds`, `github_rate_limit_remaining` | none                       |
-| `action_requests_total` (counter; result is `ok`, `rejected` or `error`, plus `auto_*` for auto actions; only with `actions`)                  | action, result             |
+| Metric                                                                                                                        | Labels                     |
+| ----------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| `repo_up`, `repo_health` (0 ok, 1 warn, 2 crit)                                                                               | repo                       |
+| `repo_open_issues`, `repo_open_prs`, `repo_open_prs_failing_checks`, `repo_stale_issues`                                      | repo                       |
+| `repo_oldest_pr_age_seconds`, `repo_last_refresh_timestamp_seconds`                                                           | repo                       |
+| `pr_age_seconds`, `pr_checks_failing`                                                                                         | repo, number               |
+| `workflow_failing`, `workflow_running`, `workflow_last_run_timestamp_seconds`                                                 | repo, workflow, background |
+| `release_info`, `release_published_timestamp_seconds`                                                                         | repo, version, url         |
+| `alerts`                                                                                                                      | severity                   |
+| `refreshes_total`, `repo_refresh_errors_total`, `last_refresh_duration_seconds`, `github_rate_limit_remaining`                | none                       |
+| `action_requests_total` (counter; result is `ok`, `rejected` or `error`, plus `auto_*` for auto actions; only with `actions`) | action, result             |
 
 Example alert rules:
 

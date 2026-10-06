@@ -156,7 +156,7 @@ describe('AttentionRow', () => {
   it('omits the age for an unknown timestamp', () => {
     const w = mount(AttentionRow, {
       props: {
-        row: row({ since: '0001-01-01T00:00:00Z', kind: 'issues_stale' }),
+        row: row({ since: '0001-01-01T00:00:00Z', kind: 'issue_stale' }),
         nowMs,
         critSeconds: CRIT_SECONDS,
       },

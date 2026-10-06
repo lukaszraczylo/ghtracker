@@ -38,7 +38,7 @@ const fleet = () =>
         }),
         alert({
           repo: 'b/two',
-          kind: 'issues_stale',
+          kind: 'issue_stale',
           severity: 'warn',
           subject: '4 stale issues',
           url: '3',
@@ -62,7 +62,7 @@ describe('kindGroup', () => {
     ['workflow_stuck', 'workflow'],
     ['pr_waiting', 'pr'],
     ['pr_checks_failing', 'pr'],
-    ['issues_stale', 'issue'],
+    ['issue_stale', 'issue'],
     ['refresh_failed', 'data'],
     ['data_stale', 'data'],
     ['partial_data', 'data'],

@@ -67,7 +67,7 @@ func TestEvaluate(t *testing.T) {
 		}, map[string]model.Severity{KindWorkflowStuck: model.Warn}, model.Warn},
 		"pr fresh": {func(r *model.Repo) {
 			r.PRs = []model.PullRequest{{Number: 1, Fork: true, CreatedAt: t0.Add(-47 * time.Hour)}}
-		}, map[string]model.Severity{}, model.OK},
+		}, map[string]model.Severity{KindPRFresh: model.Warn}, model.Warn},
 		"pr waiting warn": {func(r *model.Repo) {
 			r.PRs = []model.PullRequest{{Number: 1, Fork: true, CreatedAt: t0.Add(-49 * time.Hour)}}
 		}, map[string]model.Severity{KindPRWaiting: model.Warn}, model.Warn},
@@ -79,11 +79,13 @@ func TestEvaluate(t *testing.T) {
 		}, map[string]model.Severity{}, model.OK},
 		"pr checks failing": {func(r *model.Repo) {
 			r.PRs = []model.PullRequest{{Number: 1, Fork: true, CreatedAt: t0, Checks: model.CheckSummary{State: model.ChecksFail, Failing: []string{"build"}}}}
-		}, map[string]model.Severity{KindPRChecks: model.Warn}, model.Warn},
-		"issues stale aggregated": {func(r *model.Repo) {
-			old := t0.Add(-40 * 24 * time.Hour)
-			r.Issues = []model.Issue{{Number: 1, UpdatedAt: old}, {Number: 2, UpdatedAt: old}, {Number: 3, UpdatedAt: t0}}
-		}, map[string]model.Severity{KindIssuesStale: model.Warn}, model.Warn},
+		}, map[string]model.Severity{KindPRFresh: model.Warn, KindPRChecks: model.Warn}, model.Warn},
+		"issue stale": {func(r *model.Repo) {
+			r.Issues = []model.Issue{{Number: 1, CreatedAt: t0.Add(-60 * 24 * time.Hour), UpdatedAt: t0.Add(-40 * 24 * time.Hour)}}
+		}, map[string]model.Severity{KindIssueStale: model.Warn}, model.Warn},
+		"issue fresh": {func(r *model.Repo) {
+			r.Issues = []model.Issue{{Number: 1, CreatedAt: t0.Add(-time.Hour), UpdatedAt: t0}}
+		}, map[string]model.Severity{KindIssueFresh: model.Warn}, model.Warn},
 		"archived repo skips work alerts": {func(r *model.Repo) {
 			r.Archived = true
 			r.PRs = []model.PullRequest{{Number: 1, Fork: true, CreatedAt: t0.Add(-30 * 24 * time.Hour)}}
@@ -125,8 +127,10 @@ func TestEvaluateDisabledThresholds(t *testing.T) {
 	r := model.Repo{FullName: "o/r", RefreshedAt: t0, PRs: []model.PullRequest{{Number: 1, Fork: true, CreatedAt: t0.Add(-100 * 24 * time.Hour)}},
 		Issues: []model.Issue{{UpdatedAt: t0.Add(-100 * 24 * time.Hour)}}}
 	off := config.Thresholds{PRWarnAfter: -1, PRCritAfter: -1, IssueStaleAfter: -1, WorkflowStuck: -1, DataStaleAfter: -1}
-	if a := withoutPROpen(Evaluate(&r, t0, off)); len(a) != 0 {
-		t.Fatalf("disabled checks produced %+v", a)
+	for _, a := range withoutPROpen(Evaluate(&r, t0, off)) {
+		if a.Kind != KindPRFresh && a.Kind != KindIssueFresh {
+			t.Fatalf("disabled checks produced %+v", a)
+		}
 	}
 }
 
@@ -134,11 +138,11 @@ func TestAgeAdvancesWithoutRefresh(t *testing.T) {
 	r := model.Repo{FullName: "o/r", RefreshedAt: t0, PRs: []model.PullRequest{{Number: 1, Fork: true, CreatedAt: t0.Add(-40 * time.Hour)}}}
 	cfg := th()
 	cfg.DataStaleAfter = -1
-	if a := withoutPROpen(Evaluate(&r, t0, cfg)); len(a) != 0 {
-		t.Fatalf("unexpected %+v", a)
+	if a := withoutPROpen(Evaluate(&r, t0, cfg)); len(a) != 1 || a[0].Kind != KindPRFresh {
+		t.Fatalf("a PR below the warn threshold must be fresh: %+v", a)
 	}
-	if a := withoutPROpen(Evaluate(&r, t0.Add(10*time.Hour), cfg)); len(a) != 1 || a[0].Severity != model.Warn {
-		t.Fatalf("PR must cross the warn threshold as time passes: %+v", a)
+	if a := withoutPROpen(Evaluate(&r, t0.Add(10*time.Hour), cfg)); len(a) != 1 || a[0].Kind != KindPRWaiting {
+		t.Fatalf("PR must turn from fresh to waiting as time passes: %+v", a)
 	}
 }
 
@@ -490,9 +494,6 @@ func TestEvaluatePROpen(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			r := model.Repo{FullName: "o/r", Up: true, RefreshedAt: t0, Archived: tc.archived, PRs: []model.PullRequest{tc.pr}}
 			alerts := Evaluate(&r, t0, th())
-			if r.Health != model.OK {
-				t.Fatalf("health = %v, want ok", r.Health)
-			}
 			if !tc.want {
 				if len(alerts) != 0 {
 					t.Fatalf("alerts = %+v, want none", alerts)
@@ -501,21 +502,31 @@ func TestEvaluatePROpen(t *testing.T) {
 			}
 			want := model.Alert{Severity: model.OK, Repo: "o/r", Kind: KindPROpen, Subject: "#7 fix", Detail: "open for 5h",
 				URL: tc.pr.URL, Ref: "abc123", Author: "alice", Since: tc.pr.CreatedAt}
-			if len(alerts) != 1 || alerts[0] != want {
+			if alerts = onlyPROpen(alerts); len(alerts) != 1 || alerts[0] != want {
 				t.Fatalf("alerts = %+v, want [%+v]", alerts, want)
 			}
 		})
 	}
 }
 
-func TestPROpenDoesNotChangeCounts(t *testing.T) {
+func onlyPROpen(in []model.Alert) []model.Alert {
+	var out []model.Alert
+	for _, a := range in {
+		if a.Kind == KindPROpen {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+func TestPROpenHasNoSeverityOfItsOwn(t *testing.T) {
 	f := &fakeFetcher{fn: func(name string) (model.Repo, error) {
 		return model.Repo{FullName: name, PRs: []model.PullRequest{{Number: 1, HeadSHA: "s", CreatedAt: t0}}}, nil
 	}}
 	c := newCollector(f, "o/a")
 	c.Refresh(context.Background())
 	v := c.View()
-	if len(v.Alerts) != 1 || v.Alerts[0].Kind != KindPROpen || v.Crit != 0 || v.Warn != 0 || v.Repos[0].Health != model.OK {
+	if len(onlyPROpen(v.Alerts)) != 1 || v.Alerts[0].Severity != model.Warn || v.Crit != 0 || v.Warn != 1 {
 		t.Fatalf("view = %+v", v)
 	}
 }

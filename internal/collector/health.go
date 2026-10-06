@@ -19,7 +19,9 @@ const (
 	KindWorkflowStuck = "workflow_stuck"
 	KindPRWaiting     = "pr_waiting"
 	KindPRChecks      = "pr_checks_failing"
-	KindIssuesStale   = "issues_stale"
+	KindPRFresh       = "pr_fresh"
+	KindIssueStale    = "issue_stale"
+	KindIssueFresh    = "issue_fresh"
 	// KindPROpen is informational plumbing for automatic actions; it has OK severity so it never moves health or counts.
 	KindPROpen = "pr_open"
 )
@@ -71,27 +73,20 @@ func Evaluate(r *model.Repo, now time.Time, th config.Thresholds) []model.Alert 
 			add(model.Crit, KindPRWaiting, subject, "open "+Age(age), pr.URL, pr.CreatedAt)
 		case th.PRWarnAfter > 0 && age >= th.PRWarnAfter:
 			add(model.Warn, KindPRWaiting, subject, "open "+Age(age), pr.URL, pr.CreatedAt)
+		default:
+			add(model.Warn, KindPRFresh, subject, "new, open "+Age(age), pr.URL, pr.CreatedAt)
 		}
 		if pr.Checks.State == model.ChecksFail {
 			add(model.Warn, KindPRChecks, subject, summarizeChecks(pr.Checks), pr.URL, pr.UpdatedAt)
 		}
 	}
 
-	if th.IssueStaleAfter > 0 {
-		var stale int
-		var oldest time.Time
-		for _, is := range r.Issues {
-			if now.Sub(is.UpdatedAt) >= th.IssueStaleAfter {
-				stale++
-				if oldest.IsZero() || is.UpdatedAt.Before(oldest) {
-					oldest = is.UpdatedAt
-				}
-			}
-		}
-		if stale > 0 {
-			add(model.Warn, KindIssuesStale, fmt.Sprintf("%d stale issues", stale),
-				"no activity for "+Age(th.IssueStaleAfter)+" or more",
-				r.URL+"/issues?q=is%3Aissue+is%3Aopen+sort%3Aupdated-asc", oldest)
+	for _, is := range r.Issues {
+		subject := fmt.Sprintf("#%d %s", is.Number, is.Title)
+		if idle := now.Sub(is.UpdatedAt); th.IssueStaleAfter > 0 && idle >= th.IssueStaleAfter {
+			add(model.Warn, KindIssueStale, subject, "no activity for "+Age(idle), is.URL, is.UpdatedAt)
+		} else {
+			add(model.Warn, KindIssueFresh, subject, "new, open "+Age(now.Sub(is.CreatedAt)), is.URL, is.CreatedAt)
 		}
 	}
 	return alerts

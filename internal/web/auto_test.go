@@ -138,10 +138,10 @@ func TestNewAutoRunnerNilWithoutAutoActions(t *testing.T) {
 
 func TestStateCarriesPROpenRef(t *testing.T) {
 	st := buildState(autoView(autoPR(1, "abc", "x", nil)), true)
-	if len(st.Alerts) != 1 || st.Alerts[0].Kind != collector.KindPROpen || st.Alerts[0].Ref != "abc" || st.Alerts[0].Severity != "ok" {
+	if len(st.Alerts) != 2 || st.Alerts[0].Kind != collector.KindPROpen || st.Alerts[0].Ref != "abc" || st.Alerts[0].Severity != "ok" || st.Alerts[1].Kind != collector.KindPRFresh {
 		t.Fatalf("alerts = %+v", st.Alerts)
 	}
-	if st.Counts.Crit != 0 || st.Counts.Warn != 0 || st.Repos[0].Health != "ok" {
-		t.Fatalf("counts/health changed: %+v %s", st.Counts, st.Repos[0].Health)
+	if st.Repos[0].Health != "warn" {
+		t.Fatalf("health = %s, want warn", st.Repos[0].Health)
 	}
 }
