@@ -3,7 +3,7 @@ module github.com/lukaszraczylo/ghtracker
 go 1.26.0
 
 require (
-	github.com/prometheus/client_golang v1.24.1
+	github.com/prometheus/client_golang v1.25.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
