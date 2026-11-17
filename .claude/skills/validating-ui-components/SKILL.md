@@ -54,15 +54,46 @@ The mock server serves `dist/` with fixed tracker data: 28 repos, every health s
    - 390 × 844, light mode.
    - 390 × 844, dark mode.
 
-   Use `mcp__plugin_playwright_playwright__browser_resize` to set the size. To change the mode, click the theme toggle in the header.
+   Use `mcp__plugin_playwright_playwright__browser_resize` to set the size. To change the mode, click the header button whose label starts with `Theme:`. It cycles through dark, system and light. Check `document.documentElement.classList.contains('dark')`, because the browser can start in either mode.
 
 4. In each view, run this check with `mcp__plugin_playwright_playwright__browser_evaluate`:
+
+   <!-- prettier-ignore -->
    ```js
-   ;() => ({ sideways: document.documentElement.scrollWidth - window.innerWidth })
+   () => {
+     const lum = (c) => {
+       const f = (v) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+       const [r, g, b] = c.match(/[\d.]+/g).map(Number)
+       return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
+     }
+     const bgOf = (el) => {
+       for (let e = el; e; e = e.parentElement) {
+         const a = getComputedStyle(e).backgroundColor.match(/[\d.]+/g)
+         if (a && (a.length < 4 || +a[3] > 0.5)) return getComputedStyle(e).backgroundColor
+       }
+       return 'rgb(255, 255, 255)'
+     }
+     const lowContrast = []
+     for (const el of document.querySelectorAll('body *')) {
+       const text = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())
+       const s = getComputedStyle(el)
+       if (!text || !el.getClientRects().length || !s.color.startsWith('rgb')) continue
+       const bg = bgOf(el)
+       if (!bg.startsWith('rgb')) continue
+       const [hi, lo] = [lum(s.color), lum(bg)].sort((x, y) => y - x)
+       const ratio = (hi + 0.05) / (lo + 0.05)
+       if (ratio < 3)
+         lowContrast.push({ text: el.textContent.trim().slice(0, 30), ratio: +ratio.toFixed(2) })
+     }
+     return { sideways: document.documentElement.scrollWidth - window.innerWidth, lowContrast }
+   }
    ```
-   `sideways` must be `0`.
+
+   - `sideways` must be `0` or less. A vertical scrollbar makes it negative.
+   - `lowContrast` must be empty. It lists text with a contrast ratio below 3:1 against the nearest opaque background. A PD tone class with a ghtracker `-foreground` token that does not fit can cause this. For example, `text-warning-foreground` on the page background.
+
 5. Read `mcp__plugin_playwright_playwright__browser_console_messages`. The production build sets PD strict mode to `warn`, so a broken PD contract shows as a `[perfect-design]` console error. There must be no errors and no warnings.
-6. Take a screenshot of each view with `mcp__plugin_playwright_playwright__browser_take_screenshot` and look at it. Check that text has contrast against its background and that colours follow the health state: red for critical, amber for warning, green for OK.
+6. Take a screenshot of each view with `mcp__plugin_playwright_playwright__browser_take_screenshot` and look at it. Check that colours follow the health state: red for critical, amber for warning, green for OK.
 7. If the change touches a row action, click the action button on a critical row. The confirmation dialog must open with a title and a description. Click Cancel to close it.
 8. Clean up:
    - Close the browser with `mcp__plugin_playwright_playwright__browser_close`.
