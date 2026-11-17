@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
+import { InlineMessage, VisuallyHidden } from '@perfect-design/ui'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppHeader from '@/components/AppHeader.vue'
 import AttentionList from '@/components/AttentionList.vue'
@@ -85,15 +86,15 @@ onBeforeUnmount(() => {
       @rescan="store.rescan()"
     />
 
-    <p v-if="error" role="alert" class="text-crit mt-4 text-sm" data-test="error">
+    <InlineMessage v-if="error" tone="danger" live="assertive" class="mt-4" data-test="error">
       Could not reach the server: {{ error }}
-    </p>
+    </InlineMessage>
 
-    <p v-if="notice" role="status" class="text-warn mt-4 text-sm" data-test="notice">
+    <InlineMessage v-if="notice" tone="warning" live="polite" class="mt-4" data-test="notice">
       {{ notice }}
-    </p>
+    </InlineMessage>
 
-    <p class="sr-only" role="status" data-test="announcement">{{ announcement }}</p>
+    <VisuallyHidden role="status" data-test="announcement">{{ announcement }}</VisuallyHidden>
 
     <LoadingScreen
       v-if="!state || !state.loaded"

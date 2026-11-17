@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { faScrewdriverWrench, faSpinner } from '@fortawesome/free-solid-svg-icons'
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import { faScrewdriverWrench } from '@fortawesome/free-solid-svg-icons'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -11,9 +10,10 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+  Badge,
+  Button,
+  Link,
+} from '@perfect-design/ui'
 import { actionKey, useTrackerStore } from '@/stores/tracker'
 import type { ActionDef, ActionStatus, Row } from '@/lib/types'
 
@@ -46,26 +46,19 @@ function press(a: ActionDef): void {
       <Button
         size="sm"
         class="font-semibold shadow-sm"
+        :icon-start="faScrewdriverWrench"
+        :loading="busy(a)"
         :disabled="busy(a)"
-        :aria-busy="busy(a)"
         :data-test="`action-${a.id}`"
         @click="press(a)"
       >
-        <FontAwesomeIcon
-          :icon="busy(a) ? faSpinner : faScrewdriverWrench"
-          :spin="busy(a)"
-          aria-hidden="true"
-        />
         {{ a.label }}
       </Button>
       <Badge v-if="busy(a)" variant="secondary" data-test="action-status">Sending</Badge>
       <Badge v-else-if="statusOf(a)" variant="secondary" data-test="action-status">
-        <a
-          v-if="statusOf(a)?.link"
-          :href="statusOf(a)?.link"
-          class="underline-offset-4 hover:underline"
-          >{{ statusOf(a)?.label || statusOf(a)?.state }}</a
-        >
+        <Link v-if="statusOf(a)?.link" :href="statusOf(a)?.link" variant="plain">{{
+          statusOf(a)?.label || statusOf(a)?.state
+        }}</Link>
         <template v-else>{{ statusOf(a)?.label || statusOf(a)?.state }}</template>
       </Badge>
     </template>

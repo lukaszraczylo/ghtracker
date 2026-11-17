@@ -6,7 +6,7 @@ import {
   faTriangleExclamation,
   type IconDefinition,
 } from '@fortawesome/free-solid-svg-icons'
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import { Badge, Heading, KpiTile, StatGroup, type Tone } from '@perfect-design/ui'
 import { computed } from 'vue'
 import FleetStrip from '@/components/FleetStrip.vue'
 import type { Repo } from '@/lib/types'
@@ -24,35 +24,33 @@ const props = defineProps<{
 }>()
 defineEmits<{ select: [fullName: string] }>()
 
-const rows = computed<{ label: string; value: number; icon: IconDefinition; tone: string }[]>(
-  () => [
-    {
-      label: 'Workflows failing',
-      value: props.facts.failingWorkflows,
-      icon: faGears,
-      tone: 'text-crit',
-    },
-    {
-      label: 'Pull requests waiting',
-      value: props.facts.waitingPrs,
-      icon: faCodePullRequest,
-      tone: 'text-crit',
-    },
-    {
-      label: 'PRs with failing checks',
-      value: props.facts.failingChecks,
-      icon: faCodePullRequest,
-      tone: 'text-warn',
-    },
-    { label: 'Stale issues', value: props.facts.staleIssues, icon: faCircleDot, tone: 'text-warn' },
-    {
-      label: 'Data problems',
-      value: props.facts.dataProblems,
-      icon: faTriangleExclamation,
-      tone: 'text-warn',
-    },
-  ],
-)
+const rows = computed<{ label: string; value: number; icon: IconDefinition; tone: Tone }[]>(() => [
+  {
+    label: 'Workflows failing',
+    value: props.facts.failingWorkflows,
+    icon: faGears,
+    tone: 'danger',
+  },
+  {
+    label: 'Pull requests waiting',
+    value: props.facts.waitingPrs,
+    icon: faCodePullRequest,
+    tone: 'danger',
+  },
+  {
+    label: 'PRs with failing checks',
+    value: props.facts.failingChecks,
+    icon: faCodePullRequest,
+    tone: 'warning',
+  },
+  { label: 'Stale issues', value: props.facts.staleIssues, icon: faCircleDot, tone: 'warning' },
+  {
+    label: 'Data problems',
+    value: props.facts.dataProblems,
+    icon: faTriangleExclamation,
+    tone: 'warning',
+  },
+])
 </script>
 
 <template>
@@ -64,22 +62,23 @@ const rows = computed<{ label: string; value: number; icon: IconDefinition; tone
         >
         <template v-else>All {{ repos.length }} projects are healthy</template>
       </p>
-      <h1
-        class="flex flex-wrap items-baseline gap-x-6 gap-y-1 font-semibold tracking-tight sm:gap-x-10"
+      <Heading
+        :level="1"
+        class="flex flex-wrap items-baseline gap-x-6 gap-y-1 sm:gap-x-10"
         data-test="headline"
       >
         <template v-if="crit > 0 || warn > 0">
-          <span v-if="crit > 0" class="text-crit">
+          <span v-if="crit > 0" class="text-destructive">
             <span class="text-5xl leading-none tabular-nums sm:text-7xl">{{ crit }}</span>
             <span class="ml-2 text-xl font-medium">critical</span>
           </span>
-          <span v-if="warn > 0" class="text-warn">
+          <span v-if="warn > 0" class="text-warning">
             <span class="text-5xl leading-none tabular-nums sm:text-7xl">{{ warn }}</span>
             <span class="ml-2 text-xl font-medium">{{ warn === 1 ? 'warning' : 'warnings' }}</span>
           </span>
         </template>
-        <span v-else class="text-ok text-5xl leading-none sm:text-7xl">All clear</span>
-      </h1>
+        <span v-else class="text-success text-5xl leading-none sm:text-7xl">All clear</span>
+      </Heading>
     </div>
 
     <div>
@@ -91,39 +90,24 @@ const rows = computed<{ label: string; value: number; icon: IconDefinition; tone
         @select="$emit('select', $event)"
       />
       <p class="text-muted-foreground mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
-        <span class="flex items-center gap-1.5"
-          ><span class="bg-crit size-2 rounded-[2px]"></span>critical</span
-        >
-        <span class="flex items-center gap-1.5"
-          ><span class="bg-warn size-2 rounded-[2px]"></span>warning</span
-        >
-        <span class="flex items-center gap-1.5"
-          ><span class="bg-ok/40 size-2 rounded-[2px]"></span>healthy</span
-        >
+        <Badge dot tone="danger" variant="outline" size="sm">critical</Badge>
+        <Badge dot tone="warning" variant="outline" size="sm">warning</Badge>
+        <Badge dot tone="success" variant="outline" size="sm">healthy</Badge>
         <span class="sm:ml-auto">Tap a segment to focus a project</span>
       </p>
     </div>
 
-    <dl
-      class="border-border grid grid-cols-2 gap-x-6 border-t sm:grid-cols-3 lg:grid-cols-5"
-      data-test="facts"
-    >
-      <div
+    <StatGroup :columns="5" layout="divided" data-test="facts">
+      <KpiTile
         v-for="row in rows"
         :key="row.label"
-        class="border-border border-b py-3 last:col-span-2 sm:last:col-span-1 lg:border-b-0"
-      >
-        <dt class="text-muted-foreground flex items-center gap-2 text-xs">
-          <FontAwesomeIcon :icon="row.icon" class="w-3.5" aria-hidden="true" />
-          {{ row.label }}
-        </dt>
-        <dd
-          class="mt-1 font-mono text-3xl tabular-nums"
-          :class="row.value > 0 ? row.tone : 'text-muted-foreground'"
-        >
-          {{ row.value }}
-        </dd>
-      </div>
-    </dl>
+        :label="row.label"
+        :value="row.value"
+        :icon="row.icon"
+        :tone="row.value > 0 ? row.tone : 'neutral'"
+        size="compact"
+        data-test="fact"
+      />
+    </StatGroup>
   </section>
 </template>

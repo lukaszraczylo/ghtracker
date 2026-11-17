@@ -1,8 +1,12 @@
 <script setup lang="ts">
-import { faCodePullRequest, faCircleDot, faGears } from '@fortawesome/free-solid-svg-icons'
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import {
+  faArrowsRotate,
+  faCircleDot,
+  faCodePullRequest,
+  faGears,
+} from '@fortawesome/free-solid-svg-icons'
+import { Card, EmptyState, Heading, Icon, IconButton, Link, StatusDot } from '@perfect-design/ui'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import RepoRefreshButton from '@/components/RepoRefreshButton.vue'
 import { ageSince, isZeroTime } from '@/lib/format'
 import type { Repo } from '@/lib/types'
 
@@ -24,7 +28,8 @@ const shown = ref(PAGE_SIZE)
 const visible = computed(() => props.repos.slice(0, shown.value))
 const hasMore = computed(() => shown.value < props.repos.length)
 
-const scroller = ref<HTMLElement | null>(null)
+const scroller = ref<InstanceType<typeof Card> | null>(null)
+const scrollEl = () => scroller.value?.$el as HTMLElement | undefined
 const sentinel = ref<HTMLElement | null>(null)
 let observer: IntersectionObserver | null = null
 
@@ -37,7 +42,8 @@ watch(
   () => props.repos,
   () => {
     shown.value = PAGE_SIZE
-    if (scroller.value) scroller.value.scrollTop = 0
+    const el = scrollEl()
+    if (el) el.scrollTop = 0
   },
 )
 
@@ -61,35 +67,41 @@ onMounted(async () => {
     (entries) => {
       if (entries.some((e) => e.isIntersecting)) loadMore()
     },
-    { root: scroller.value, rootMargin: '200px' },
+    { root: scrollEl() ?? null, rootMargin: '200px' },
   )
   if (sentinel.value) observer.observe(sentinel.value)
 })
 onBeforeUnmount(() => observer?.disconnect())
 
-const DOT = { crit: 'bg-crit', warn: 'bg-warn', ok: 'bg-ok' } as const
+const busy = (name: string) => props.refreshing?.includes(name) ?? false
+
+const TONE = { crit: 'danger', warn: 'warning', ok: 'success' } as const
 const LABEL = { crit: 'Critical', warn: 'Warning', ok: 'Healthy' } as const
 </script>
 
 <template>
   <section aria-labelledby="projects-title">
-    <h2 id="projects-title" class="mb-4 text-lg font-semibold tracking-tight">
+    <Heading id="projects-title" :level="2" size="lg" class="mb-4">
       Projects
       <span class="text-muted-foreground text-sm font-normal" data-test="project-count">{{
         repos.length === total ? total : `${repos.length} of ${total}`
       }}</span>
-    </h2>
-    <p
+    </Heading>
+    <EmptyState
       v-if="repos.length === 0"
-      class="text-muted-foreground border-border rounded-lg border border-dashed p-4 text-sm"
+      variant="bordered-dashed"
+      layout="start"
+      size="sm"
+      title="No projects match the search."
+      title-as="p"
       data-test="no-projects"
-    >
-      No projects match the search.
-    </p>
-    <ul
+    />
+    <Card
       v-else
       ref="scroller"
-      class="border-border bg-surface divide-border max-h-[70vh] divide-y overflow-y-auto rounded-lg border [scrollbar-color:var(--border)_transparent] [scrollbar-width:thin] xl:max-h-[calc(100vh-7rem)]"
+      as="ul"
+      size="sm"
+      class="divide-border max-h-[70vh] gap-0 divide-y overflow-y-auto p-0 [scrollbar-color:var(--border)_transparent] [scrollbar-width:thin] xl:max-h-[calc(100vh-7rem)]"
     >
       <li
         v-for="repo in visible"
@@ -99,60 +111,76 @@ const LABEL = { crit: 'Critical', warn: 'Warning', ok: 'Healthy' } as const
         data-test="project"
       >
         <div class="flex items-center gap-2.5">
-          <span class="size-2 shrink-0 rounded-full" :class="DOT[repo.health]"></span>
-          <span class="sr-only">{{ LABEL[repo.health] }}:</span>
+          <StatusDot :tone="TONE[repo.health]" size="sm" :label="`${LABEL[repo.health]}:`" />
           <button
             type="button"
-            class="hover:text-link min-w-0 flex-1 truncate text-left text-sm font-medium"
+            class="hover:text-primary min-w-0 flex-1 truncate text-left text-sm font-medium"
             :aria-pressed="focused === repo.fullName"
             @click="$emit('select', repo.fullName)"
           >
             {{ repo.fullName.split('/')[1] }}
             <span class="text-muted-foreground font-normal">{{ repo.fullName.split('/')[0] }}</span>
           </button>
-          <a
+          <Link
             v-if="repo.release"
             :href="repo.release.url"
-            class="text-muted-foreground hover:text-link font-mono text-xs"
+            variant="muted"
+            size="sm"
+            class="font-mono text-xs"
           >
             {{ repo.release.tag }}
-          </a>
-          <a v-else :href="repo.releasesUrl" class="text-muted-foreground hover:text-link text-xs"
-            >no release</a
+          </Link>
+          <Link v-else :href="repo.releasesUrl" variant="muted" size="sm" class="text-xs"
+            >no release</Link
           >
-          <RepoRefreshButton
+          <IconButton
             v-if="manualRefresh"
-            :repo="repo.fullName"
-            :busy="refreshing?.includes(repo.fullName) ?? false"
-            :blocked="scanning ?? false"
-            class="-my-1 -mr-1"
-            @refresh="$emit('refresh', repo.fullName)"
+            :icon="faArrowsRotate"
+            :label="`Refresh ${repo.fullName}`"
+            variant="ghost"
+            size="icon-xs"
+            class="text-muted-foreground hover:text-primary -my-1 -mr-1"
+            :loading="busy(repo.fullName)"
+            :disabled="scanning || busy(repo.fullName)"
+            data-test="repo-refresh"
+            @click="$emit('refresh', repo.fullName)"
           />
         </div>
         <div
           class="text-muted-foreground mt-1 flex items-center gap-4 pl-[18px] text-xs tabular-nums"
         >
-          <a
+          <Link
             :href="`${repo.url}/actions`"
-            class="hover:text-link flex items-center gap-1.5"
-            :class="repo.workflows.failing ? 'text-crit' : ''"
+            :variant="repo.workflows.failing ? 'destructive' : 'muted'"
+            size="sm"
+            class="flex items-center gap-1.5 text-xs no-underline"
           >
-            <FontAwesomeIcon :icon="faGears" aria-hidden="true" />
+            <Icon :icon="faGears" size="xs" />
             {{
               repo.workflows.failing
                 ? `${repo.workflows.failing}/${repo.workflows.total} failing`
                 : repo.workflows.total
             }}
             <span class="sr-only">workflows</span>
-          </a>
-          <a :href="`${repo.url}/pulls`" class="hover:text-link flex items-center gap-1.5">
-            <FontAwesomeIcon :icon="faCodePullRequest" aria-hidden="true" />{{ repo.prs.open }}
+          </Link>
+          <Link
+            :href="`${repo.url}/pulls`"
+            variant="muted"
+            size="sm"
+            class="flex items-center gap-1.5 text-xs"
+          >
+            <Icon :icon="faCodePullRequest" size="xs" />{{ repo.prs.open }}
             <span class="sr-only">pull requests</span>
-          </a>
-          <a :href="`${repo.url}/issues`" class="hover:text-link flex items-center gap-1.5">
-            <FontAwesomeIcon :icon="faCircleDot" aria-hidden="true" />{{ repo.issues.open }}
+          </Link>
+          <Link
+            :href="`${repo.url}/issues`"
+            variant="muted"
+            size="sm"
+            class="flex items-center gap-1.5 text-xs"
+          >
+            <Icon :icon="faCircleDot" size="xs" />{{ repo.issues.open }}
             <span class="sr-only">issues</span>
-          </a>
+          </Link>
           <span v-if="repo.release && !isZeroTime(repo.release.publishedAt)" class="ml-auto">
             released {{ ageSince(repo.release.publishedAt, nowMs) }} ago
           </span>
@@ -166,6 +194,6 @@ const LABEL = { crit: 'Critical', warn: 'Warning', ok: 'Healthy' } as const
       >
         Showing {{ visible.length }} of {{ repos.length }}
       </li>
-    </ul>
+    </Card>
   </section>
 </template>

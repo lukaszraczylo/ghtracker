@@ -3,16 +3,12 @@ import {
   faCircleDot,
   faCodePullRequest,
   faGears,
-  faMagnifyingGlass,
   faTriangleExclamation,
   faXmark,
   type IconDefinition,
 } from '@fortawesome/free-solid-svg-icons'
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import { Button, Icon, SearchInput, ToggleGroup, ToggleGroupItem } from '@perfect-design/ui'
 import { ref } from 'vue'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { KIND_GROUPS, type Facets, type Filters, type KindGroup } from '@/lib/filters'
 import type { SeverityFilter } from '@/lib/filters'
 
@@ -27,8 +23,8 @@ const KIND_META: Record<KindGroup, { label: string; icon: IconDefinition }> = {
   data: { label: 'Data', icon: faTriangleExclamation },
 }
 
-const search = ref<InstanceType<typeof Input> | null>(null)
-defineExpose({ focus: () => (search.value?.$el as HTMLInputElement | undefined)?.focus() })
+const search = ref<InstanceType<typeof SearchInput> | null>(null)
+defineExpose({ focus: () => search.value?.focus() })
 
 function patch(change: Partial<Filters>): void {
   filters.value = { ...filters.value, ...change }
@@ -49,30 +45,17 @@ function onOwners(value: unknown): void {
 <template>
   <div class="flex flex-col gap-3" data-test="filter-bar">
     <div class="flex flex-wrap items-center gap-3">
-      <div class="relative min-w-0 basis-full sm:min-w-56 sm:flex-1 sm:basis-0">
-        <FontAwesomeIcon
-          :icon="faMagnifyingGlass"
-          class="text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2"
-          aria-hidden="true"
-        />
-        <Input
-          ref="search"
-          :model-value="filters.query"
-          type="search"
-          placeholder="Search items, projects and versions"
-          aria-label="Search"
-          class="bg-surface pr-9 pl-9"
-          data-test="search"
-          @update:model-value="patch({ query: String($event ?? '') })"
-          @keydown.esc="patch({ query: '' })"
-        />
-        <kbd
-          v-if="!filters.query"
-          class="border-border text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 rounded border px-1.5 font-mono text-[11px]"
-          aria-hidden="true"
-          >/</kbd
-        >
-      </div>
+      <SearchInput
+        ref="search"
+        :model-value="filters.query"
+        placeholder="Press / to search items, projects and versions"
+        aria-label="Search"
+        aria-keyshortcuts="/"
+        class="min-w-0 basis-full sm:min-w-56 sm:flex-1 sm:basis-0"
+        input-class="bg-card"
+        data-test="search"
+        @update:model-value="patch({ query: String($event ?? '') })"
+      />
       <ToggleGroup
         type="single"
         class="max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -111,7 +94,7 @@ function onOwners(value: unknown): void {
           :disabled="facets.kinds[kind] === 0 && !filters.kinds.includes(kind)"
           :data-test="`kind-${kind}`"
         >
-          <FontAwesomeIcon :icon="KIND_META[kind].icon" aria-hidden="true" />
+          <Icon :icon="KIND_META[kind].icon" />
           {{ KIND_META[kind].label }}
           <span class="text-muted-foreground tabular-nums">{{ facets.kinds[kind] }}</span>
         </ToggleGroupItem>
@@ -145,7 +128,7 @@ function onOwners(value: unknown): void {
         data-test="clear-all"
         @click="$emit('clear')"
       >
-        <FontAwesomeIcon :icon="faXmark" aria-hidden="true" />
+        <template #icon-start><Icon :icon="faXmark" /></template>
         Clear {{ active }} {{ active === 1 ? 'filter' : 'filters' }}
       </Button>
     </div>

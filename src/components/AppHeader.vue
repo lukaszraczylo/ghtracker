@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { faArrowsRotate, faSatelliteDish } from '@fortawesome/free-solid-svg-icons'
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import { AppHeader, Button, Icon, ThemeToggle } from '@perfect-design/ui'
 import { computed } from 'vue'
-import { Button } from '@/components/ui/button'
 import { ageLabel, ageSince, isZeroTime } from '@/lib/format'
 
 const props = defineProps<{
@@ -26,28 +25,22 @@ const nextIn = computed(() => {
   )
   return left > 0 ? ageLabel(left) : 'now'
 })
+// The header row cannot wrap, so phones show this line under it instead.
+const status = computed(() =>
+  updated.value ? `Scanned ${updated.value} ago · next in ${nextIn.value}` : 'Loading',
+)
 </script>
 
 <template>
-  <header class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-    <div class="flex items-center gap-3">
-      <span
-        class="border-border bg-surface text-link flex size-9 items-center justify-center rounded-md border"
-      >
-        <FontAwesomeIcon :icon="faSatelliteDish" aria-hidden="true" />
-      </span>
+  <AppHeader :bordered="false" class="-mx-4 w-auto">
+    <template #brand>
+      <Icon :icon="faSatelliteDish" size="lg" class="text-primary" />
       <span class="text-lg font-semibold tracking-tight">ghtracker</span>
-    </div>
-    <div class="text-muted-foreground flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
-      <span
-        v-if="updated"
-        class="order-last w-full text-xs sm:order-none sm:w-auto sm:text-sm"
-        data-test="updated"
-      >
-        Scanned {{ updated }} ago
-        <span class="text-muted-foreground/70"> · next in {{ nextIn }}</span>
-      </span>
-      <span v-else>Loading</span>
+    </template>
+    <template #actions>
+      <span class="text-muted-foreground hidden text-sm sm:inline" data-test="updated">{{
+        status
+      }}</span>
       <Button
         v-if="manualRefresh"
         variant="outline"
@@ -56,12 +49,14 @@ const nextIn = computed(() => {
         data-test="rescan"
         @click="$emit('rescan')"
       >
-        <FontAwesomeIcon :icon="faArrowsRotate" :spin="scanning" aria-hidden="true" />
+        <template #icon-start><Icon :icon="faArrowsRotate" :spin="scanning" /></template>
         <span class="hidden sm:inline">{{
           scanning ? `Scanning ${progress}`.trim() : 'Rescan repositories'
         }}</span>
         <span class="sm:hidden">{{ scanning ? progress || 'Scanning…' : 'Rescan' }}</span>
       </Button>
-    </div>
-  </header>
+      <ThemeToggle size="sm" />
+    </template>
+  </AppHeader>
+  <p class="text-muted-foreground text-xs sm:hidden">{{ status }}</p>
 </template>

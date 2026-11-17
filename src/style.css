@@ -1,73 +1,100 @@
 @import 'tailwindcss';
+@import '@perfect-design/ui/theme.css';
+/* Only the PD modules the app bundles; vite.config.ts fails the build when one is missing. */
+@source '../node_modules/@perfect-design/ui/dist/lib';
+@source '../node_modules/@perfect-design/ui/dist/stores';
+@source '../node_modules/@perfect-design/ui/dist/components/primitives/Badge';
+@source '../node_modules/@perfect-design/ui/dist/components/primitives/Button';
+@source '../node_modules/@perfect-design/ui/dist/components/primitives/Icon';
+@source '../node_modules/@perfect-design/ui/dist/components/primitives/IconButton';
+@source '../node_modules/@perfect-design/ui/dist/components/primitives/Kbd';
+@source '../node_modules/@perfect-design/ui/dist/components/primitives/Link';
+@source '../node_modules/@perfect-design/ui/dist/components/primitives/Progress';
+@source '../node_modules/@perfect-design/ui/dist/components/primitives/Skeleton';
+@source '../node_modules/@perfect-design/ui/dist/components/primitives/Spinner';
+@source '../node_modules/@perfect-design/ui/dist/components/primitives/StatusDot';
+@source '../node_modules/@perfect-design/ui/dist/components/primitives/Toggle';
+@source '../node_modules/@perfect-design/ui/dist/components/primitives/ToggleGroup';
+@source '../node_modules/@perfect-design/ui/dist/components/primitives/VisuallyHidden';
+@source '../node_modules/@perfect-design/ui/dist/components/forms/Field';
+@source '../node_modules/@perfect-design/ui/dist/components/forms/SearchInput';
+@source '../node_modules/@perfect-design/ui/dist/components/layout/ConfigProvider/config.js';
+@source '../node_modules/@perfect-design/ui/dist/components/feedback/EmptyState';
+@source '../node_modules/@perfect-design/ui/dist/components/feedback/InlineMessage';
+@source '../node_modules/@perfect-design/ui/dist/components/feedback/pick.js';
+@source '../node_modules/@perfect-design/ui/dist/components/feedback/requireContent.js';
+@source '../node_modules/@perfect-design/ui/dist/components/feedback/tones.js';
+@source '../node_modules/@perfect-design/ui/dist/components/overlays/AlertDialog';
+@source '../node_modules/@perfect-design/ui/dist/components/overlays/Tooltip';
+@source '../node_modules/@perfect-design/ui/dist/components/overlays/overlayTone.js';
+@source '../node_modules/@perfect-design/ui/dist/components/overlays/triggerCheck.js';
+@source '../node_modules/@perfect-design/ui/dist/components/navigation/ThemeToggle';
+@source '../node_modules/@perfect-design/ui/dist/components/navigation/AppHeader';
+@source '../node_modules/@perfect-design/ui/dist/components/navigation/MobileNav';
+@source '../node_modules/@perfect-design/ui/dist/components/navigation/contract.js';
+@source '../node_modules/@perfect-design/ui/dist/components/data-display/Card';
+@source '../node_modules/@perfect-design/ui/dist/components/data-display/KpiTile';
+@source '../node_modules/@perfect-design/ui/dist/components/data-display/Sparkline';
+@source '../node_modules/@perfect-design/ui/dist/components/data-display/StatGroup';
+@source '../node_modules/@perfect-design/ui/dist/components/data-display/_chart';
+@source '../node_modules/@perfect-design/ui/dist/components/data-display/_shared';
+@source '../node_modules/@perfect-design/ui/dist/components/typography/Eyebrow';
+@source '../node_modules/@perfect-design/ui/dist/components/typography/Heading';
 
-@custom-variant dark (@media (prefers-color-scheme: dark));
-
+/* ghtracker colours over the Perfect Design token contract. */
 :root {
   --background: #f3f1ea;
-  --surface: #fbfaf6;
   --foreground: #1b1a17;
-  --muted-foreground: #66625a;
-  --border: #dcd7ca;
-  --link: #0b5c8a;
-  --crit: #c4291c;
-  --warn: #8f5b00;
-  --ok: #17794d;
+  --card: #fbfaf6;
+  --card-foreground: #1b1a17;
+  --popover: #fbfaf6;
+  --popover-foreground: #1b1a17;
   --primary: #0b5c8a;
   --primary-foreground: #ffffff;
   --secondary: #e7e3d9;
   --secondary-foreground: #1b1a17;
   --muted: #ebe8df;
+  --muted-foreground: #66625a;
   --accent: #e7e3d9;
   --accent-foreground: #1b1a17;
   --destructive: #c4291c;
+  --destructive-foreground: #ffffff;
+  --success: #17794d;
+  --success-foreground: #ffffff;
+  --warning: #8f5b00;
+  --warning-foreground: #ffffff;
+  --border: #dcd7ca;
   --input: #cdc8bb;
   --ring: #0b5c8a;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0d0d0c;
-    --surface: #151513;
-    --foreground: #eceae3;
-    --muted-foreground: #98948a;
-    --border: #272622;
-    --link: #7dbdf0;
-    --crit: #ff6a5c;
-    --warn: #f2b43a;
-    --ok: #4cc38a;
-    --primary: #7dbdf0;
-    --primary-foreground: #0b1620;
-    --secondary: #201f1c;
-    --secondary-foreground: #eceae3;
-    --muted: #1b1a18;
-    --accent: #22211e;
-    --accent-foreground: #eceae3;
-    --destructive: #ff6a5c;
-    --input: #38362f;
-    --ring: #7dbdf0;
-  }
+.dark {
+  --background: #0d0d0c;
+  --foreground: #eceae3;
+  --card: #151513;
+  --card-foreground: #eceae3;
+  --popover: #1b1a18;
+  --popover-foreground: #eceae3;
+  --primary: #7dbdf0;
+  --primary-foreground: #0b1620;
+  --secondary: #201f1c;
+  --secondary-foreground: #eceae3;
+  --muted: #1b1a18;
+  --muted-foreground: #98948a;
+  --accent: #22211e;
+  --accent-foreground: #eceae3;
+  --destructive: #ff6a5c;
+  --destructive-foreground: #1b0806;
+  --success: #4cc38a;
+  --success-foreground: #06170f;
+  --warning: #f2b43a;
+  --warning-foreground: #1b1203;
+  --border: #272622;
+  --input: #38362f;
+  --ring: #7dbdf0;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-surface: var(--surface);
-  --color-foreground: var(--foreground);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-border: var(--border);
-  --color-link: var(--link);
-  --color-crit: var(--crit);
-  --color-warn: var(--warn);
-  --color-ok: var(--ok);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
   --font-sans: 'Schibsted Grotesk Variable', 'Avenir Next', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
 }
@@ -75,8 +102,5 @@
 @layer base {
   body {
     @apply bg-background text-foreground font-sans antialiased;
-  }
-  :focus-visible {
-    @apply outline-2 outline-offset-2 outline-link;
   }
 }

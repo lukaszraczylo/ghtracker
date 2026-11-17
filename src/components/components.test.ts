@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import AgeMeter from './AgeMeter.vue'
+import { createPinia, setActivePinia } from 'pinia'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AppHeader from './AppHeader.vue'
 import AttentionList from './AttentionList.vue'
 import FilterBar from './FilterBar.vue'
@@ -19,6 +19,8 @@ const CRIT_SECONDS = 604800
 const text = (w: { text(): string }) => w.text().replace(/\s+/g, ' ')
 
 describe('AppHeader', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+
   const base = {
     lastRefresh: '2026-10-02T11:00:00Z',
     nowMs,
@@ -75,10 +77,15 @@ describe('FleetOverview', () => {
     expect(w.get('[data-test=scope]').text()).toBe('1 of 2 projects need attention')
   })
 
-  it('lists the headline facts, dimming zeros', () => {
+  it('lists the headline facts', () => {
     const w = mount(FleetOverview, { props })
     const facts = Object.fromEntries(
-      w.findAll('[data-test=facts] > div').map((d) => [d.get('dt').text(), d.get('dd').text()]),
+      w
+        .findAll('[data-test=fact]')
+        .map((d) => [
+          d.get('[data-slot=kpi-tile-label]').text(),
+          d.get('[data-slot=kpi-tile-value]').text(),
+        ]),
     )
     expect(facts).toMatchObject({
       'Workflows failing': '1',
@@ -105,24 +112,6 @@ describe('FleetOverview', () => {
   })
 })
 
-describe('AgeMeter', () => {
-  it('fills proportionally and always shows at least one segment', () => {
-    const filled = (ratio: number) =>
-      mount(AgeMeter, { props: { ratio, severity: 'crit' } })
-        .findAll('span span')
-        .filter((s) => s.classes().includes('bg-crit')).length
-    expect(filled(0)).toBe(1)
-    expect(filled(0.5)).toBe(5)
-    expect(filled(3)).toBe(10)
-  })
-
-  it('uses the warning colour for warnings', () => {
-    const w = mount(AgeMeter, { props: { ratio: 0.2, severity: 'warn' } })
-    expect(w.find('.bg-warn').exists()).toBe(true)
-    expect(w.find('.bg-crit').exists()).toBe(false)
-  })
-})
-
 describe('AttentionRow', () => {
   const row = (over: Partial<Row> = {}): Row => ({
     repo: 'o/r',
@@ -141,7 +130,7 @@ describe('AttentionRow', () => {
     expect(w.text()).toContain('<b>bold</b>')
     expect(w.find('b').exists()).toBe(false)
     expect(w.text()).toContain('9d')
-    expect(w.text()).toContain('Critical')
+    expect(w.find('[aria-label=Critical]').exists()).toBe(true)
   })
 
   it('shows the age meter only for waiting pull requests', () => {
@@ -151,6 +140,22 @@ describe('AttentionRow', () => {
       props: { row: row({ kind: 'workflow_failed' }), nowMs, critSeconds: CRIT_SECONDS },
     })
     expect(wf.find('[aria-label$="critical age"]').exists()).toBe(false)
+  })
+
+  it.each([
+    { name: 'fresh PR still shows one segment', hours: 0, severity: 'warn' as const, fill: '10' },
+    { name: 'half the critical age', hours: 84, severity: 'warn' as const, fill: '50' },
+    {
+      name: 'past the critical age caps at full',
+      hours: 500,
+      severity: 'crit' as const,
+      fill: '100',
+    },
+  ])('fills the age meter in whole segments: $name', ({ hours, severity, fill }) => {
+    const w = mount(AttentionRow, {
+      props: { row: row({ since: hoursAgo(hours), severity }), nowMs, critSeconds: CRIT_SECONDS },
+    })
+    expect(w.get('[role=progressbar]').attributes('aria-valuenow')).toBe(fill)
   })
 
   it('omits the age for an unknown timestamp', () => {
@@ -424,7 +429,7 @@ describe('LoadingScreen', () => {
   it('draws one skeleton cell per repo, within sensible limits', () => {
     const cells = (total: number) =>
       mount(LoadingScreen, { props: { done: 0, total, connecting: false } }).findAll(
-        '.grid-cols-\\[repeat\\(auto-fill\\,minmax\\(1\\.5rem\\,1fr\\)\\)\\] > div',
+        '[data-test=skeleton-cell]',
       ).length
     expect(cells(5)).toBe(12)
     expect(cells(30)).toBe(30)
@@ -434,13 +439,13 @@ describe('LoadingScreen', () => {
   it('says it is connecting before the first response', () => {
     const w = mount(LoadingScreen, { props: { done: 0, total: 0, connecting: true } })
     expect(w.get('[data-test=loading-title]').text()).toBe('Connecting')
-    expect(w.find('[role=progressbar]').exists()).toBe(false)
+    expect(w.get('[role=progressbar]').attributes('aria-valuenow')).toBeUndefined()
   })
 
   it('uses an indeterminate bar while the total is not known yet', () => {
     const w = mount(LoadingScreen, { props: { done: 0, total: 0, connecting: false } })
     expect(w.get('[data-test=loading-detail]').text()).toContain('Contacting GitHub')
-    expect(w.find('[role=progressbar]').exists()).toBe(false)
+    expect(w.get('[role=progressbar]').attributes('aria-valuenow')).toBeUndefined()
   })
 
   it('is announced politely to screen readers', () => {
@@ -485,14 +490,14 @@ describe('per-repository refresh button', () => {
     expect(g.emitted('refresh')).toEqual([['o/r']])
   })
 
-  it('disables only the refreshing repo and spins its icon', () => {
+  it('disables only the refreshing repo and shows a spinner on it', () => {
     const l = list({ manualRefresh: true, refreshing: ['o/r'] })
     const [busy, idle] = l.findAll('[data-test=repo-refresh]')
     expect(busy.attributes('disabled')).toBeDefined()
     expect(busy.attributes('aria-busy')).toBe('true')
-    expect(busy.find('svg').classes()).toContain('fa-spin')
+    expect(busy.find('[data-slot=spinner]').exists()).toBe(true)
     expect(idle.attributes('disabled')).toBeUndefined()
-    expect(idle.find('svg').classes()).not.toContain('fa-spin')
+    expect(idle.find('[data-slot=spinner]').exists()).toBe(false)
   })
 
   it('disables every button while a full scan runs', () => {
