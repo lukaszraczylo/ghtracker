@@ -63,7 +63,8 @@ func TestEndToEnd(t *testing.T) {
 		case p == "/repos/o/r/actions/workflows":
 			fmt.Fprint(w, `{"workflows":[{"id":1,"name":"CI","html_url":"w","state":"active"}]}`)
 		case p == "/repos/o/r/actions/workflows/1/runs":
-			fmt.Fprint(w, `{"workflow_runs":[{"id":1,"html_url":"r","event":"push","head_branch":"main","status":"completed","conclusion":"failure","created_at":"2026-10-01T00:00:00Z"}]}`)
+			// A fixed date would age past the dormant threshold and mute the failure.
+			fmt.Fprintf(w, `{"workflow_runs":[{"id":1,"html_url":"r","event":"push","head_branch":"main","status":"completed","conclusion":"failure","created_at":%q}]}`, time.Now().Add(-time.Hour).UTC().Format(time.RFC3339))
 		case p == "/repos/o/r/releases/latest":
 			fmt.Fprint(w, `{"tag_name":"v9.9.9","html_url":"rel","published_at":"2026-10-01T00:00:00Z"}`)
 		default:
