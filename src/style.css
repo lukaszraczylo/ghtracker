@@ -64,7 +64,8 @@
   --success: #17794d;
   --success-foreground: #ffffff;
   --warning: #8f5b00;
-  --warning-foreground: #ffffff;
+  /* PD also uses this as text on light and tinted surfaces (outline badges, notices), so it must stay dark. */
+  --warning-foreground: #1b1203;
   --border: #dcd7ca;
   --input: #cdc8bb;
   --ring: #0b5c8a;
