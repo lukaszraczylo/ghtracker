@@ -1,12 +1,20 @@
 <script setup lang="ts">
-import { faTag } from '@fortawesome/free-solid-svg-icons'
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import { faArrowsRotate, faTag } from '@fortawesome/free-solid-svg-icons'
+import {
+  Badge,
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Icon,
+  IconButton,
+  Link,
+} from '@perfect-design/ui'
 import AttentionRow from '@/components/AttentionRow.vue'
-import RepoRefreshButton from '@/components/RepoRefreshButton.vue'
-import { Badge } from '@/components/ui/badge'
 import type { Block } from '@/lib/types'
 
-defineProps<{
+const props = defineProps<{
   block: Block
   nowMs: number
   critSeconds: number
@@ -15,36 +23,46 @@ defineProps<{
   scanning?: boolean
 }>()
 defineEmits<{ refresh: [fullName: string] }>()
+
+const busy = () => props.refreshing?.includes(props.block.repo.fullName) ?? false
 </script>
 
 <template>
-  <section class="border-border bg-surface rounded-lg border" data-test="repo-block">
-    <header class="border-border flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-3">
-      <h3 class="font-semibold">
-        <a :href="block.repo.url" class="hover:text-link underline-offset-4 hover:underline">
+  <Card as="section" size="sm" class="gap-0 p-0" data-test="repo-block">
+    <CardHeader
+      as="header"
+      class="border-border flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-3"
+    >
+      <CardTitle as="h3">
+        <Link :href="block.repo.url" variant="subtle">
           <span class="text-muted-foreground font-normal"
             >{{ block.repo.fullName.split('/')[0] }}/</span
           >{{ block.repo.fullName.split('/')[1] }}
-        </a>
-      </h3>
+        </Link>
+      </CardTitle>
       <Badge v-if="block.repo.release" variant="secondary" as-child class="font-mono">
         <a :href="block.repo.release.url">
-          <FontAwesomeIcon :icon="faTag" aria-hidden="true" class="text-[0.7em]" />
+          <Icon :icon="faTag" size="xs" />
           {{ block.repo.release.tag }}
         </a>
       </Badge>
-      <span class="text-muted-foreground ml-auto flex items-center gap-1 text-xs">
+      <CardAction class="text-muted-foreground ml-auto flex items-center gap-1 text-xs">
         {{ block.rows.length }} {{ block.rows.length === 1 ? 'item' : 'items' }}
-        <RepoRefreshButton
+        <IconButton
           v-if="manualRefresh"
-          :repo="block.repo.fullName"
-          :busy="refreshing?.includes(block.repo.fullName) ?? false"
-          :blocked="scanning ?? false"
-          @refresh="$emit('refresh', block.repo.fullName)"
+          :icon="faArrowsRotate"
+          :label="`Refresh ${block.repo.fullName}`"
+          variant="ghost"
+          size="icon-xs"
+          class="text-muted-foreground hover:text-primary"
+          :loading="busy()"
+          :disabled="scanning || busy()"
+          data-test="repo-refresh"
+          @click="$emit('refresh', block.repo.fullName)"
         />
-      </span>
-    </header>
-    <ul class="divide-border divide-y px-4">
+      </CardAction>
+    </CardHeader>
+    <CardContent as="ul" class="divide-border divide-y px-4 py-0">
       <AttentionRow
         v-for="row in block.rows"
         :key="row.url"
@@ -52,6 +70,6 @@ defineEmits<{ refresh: [fullName: string] }>()
         :now-ms="nowMs"
         :crit-seconds="critSeconds"
       />
-    </ul>
-  </section>
+    </CardContent>
+  </Card>
 </template>

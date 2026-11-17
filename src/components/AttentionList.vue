@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { faCircleCheck } from '@fortawesome/free-solid-svg-icons'
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import { EmptyState, Heading } from '@perfect-design/ui'
 import { computed, ref } from 'vue'
 import FilterBar from '@/components/FilterBar.vue'
 import RepoGroup from '@/components/RepoGroup.vue'
@@ -35,7 +35,7 @@ defineExpose({ focusSearch: () => bar.value?.focus() })
 
 <template>
   <section aria-labelledby="attention-title">
-    <h2 id="attention-title" class="mb-4 text-lg font-semibold tracking-tight">Needs attention</h2>
+    <Heading id="attention-title" :level="2" size="lg" class="mb-4">Needs attention</Heading>
     <FilterBar
       ref="bar"
       v-model:filters="filters"
@@ -46,14 +46,17 @@ defineExpose({ focusSearch: () => bar.value?.focus() })
       @clear="$emit('clear')"
     />
 
-    <div
+    <EmptyState
       v-if="blocks.length === 0"
-      class="border-border text-muted-foreground flex items-center gap-3 rounded-lg border border-dashed p-6"
+      :icon="faCircleCheck"
+      tone="success"
+      variant="bordered-dashed"
+      layout="start"
+      size="sm"
+      title="Nothing matches the current filters."
+      title-as="p"
       data-test="empty"
-    >
-      <FontAwesomeIcon :icon="faCircleCheck" class="text-ok text-xl" aria-hidden="true" />
-      Nothing matches the current filters.
-    </div>
+    />
     <div v-else class="flex items-start gap-4" data-test="columns">
       <div v-for="(column, i) in columns" :key="i" class="flex min-w-0 flex-1 flex-col gap-4">
         <RepoGroup

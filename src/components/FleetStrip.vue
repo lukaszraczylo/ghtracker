@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@perfect-design/ui'
 import type { Repo } from '@/lib/types'
 import type { RepoCounts } from '@/stores/tracker'
 
@@ -11,7 +11,11 @@ defineProps<{
 }>()
 defineEmits<{ select: [fullName: string] }>()
 
-const SEGMENT = { crit: 'bg-crit', warn: 'bg-warn', ok: 'bg-ok/30 hover:bg-ok/60' } as const
+const SEGMENT = {
+  crit: 'bg-destructive',
+  warn: 'bg-warning',
+  ok: 'bg-success/30 hover:bg-success/60',
+} as const
 
 function summary(c: RepoCounts | undefined): string {
   if (!c) return 'healthy'

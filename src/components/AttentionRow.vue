@@ -1,7 +1,6 @@
 <script setup lang="ts">
+import { Icon, Link, Progress } from '@perfect-design/ui'
 import { computed } from 'vue'
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import AgeMeter from '@/components/AgeMeter.vue'
 import RowActions from '@/components/RowActions.vue'
 import { ageSince, isZeroTime, secondsSince, shorten } from '@/lib/format'
 import { iconFor } from '@/lib/kinds'
@@ -9,7 +8,13 @@ import type { Row } from '@/lib/types'
 
 const props = defineProps<{ row: Row; nowMs: number; critSeconds: number }>()
 
+const AGE_SEGMENTS = 10
 const ratio = computed(() => secondsSince(props.row.since, props.nowMs) / props.critSeconds)
+// Whole segments, at least one, so a fresh PR still shows on the meter.
+const ageFill = computed(
+  () => Math.min(AGE_SEGMENTS, Math.max(1, Math.ceil(ratio.value * AGE_SEGMENTS))) * AGE_SEGMENTS,
+)
+const crit = computed(() => props.row.severity === 'crit')
 </script>
 
 <template>
@@ -17,20 +22,17 @@ const ratio = computed(() => secondsSince(props.row.since, props.nowMs) / props.
     class="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1 py-3 sm:grid-cols-[2rem_minmax(0,1fr)_auto]"
     data-test="row"
   >
-    <span
-      class="flex size-8 items-center justify-center rounded-md"
-      :class="row.severity === 'crit' ? 'bg-crit/12 text-crit' : 'bg-warn/12 text-warn'"
-    >
-      <FontAwesomeIcon :icon="iconFor(row.kind)" aria-hidden="true" />
-      <span class="sr-only">{{ row.severity === 'crit' ? 'Critical' : 'Warning' }}</span>
-    </span>
+    <Icon
+      :icon="iconFor(row.kind)"
+      size="lg"
+      :label="crit ? 'Critical' : 'Warning'"
+      class="mt-0.5 justify-self-center"
+      :class="crit ? 'text-destructive' : 'text-warning'"
+    />
     <div class="min-w-0">
-      <a
-        :href="row.url"
-        class="hover:text-link leading-snug font-medium wrap-anywhere underline-offset-4 hover:underline"
-      >
+      <Link :href="row.url" variant="subtle" class="leading-snug font-medium wrap-anywhere">
         {{ shorten(row.subject) }}
-      </a>
+      </Link>
       <p class="text-muted-foreground mt-0.5 text-sm wrap-anywhere">
         {{ shorten(row.detail, 120) }}
       </p>
@@ -42,10 +44,15 @@ const ratio = computed(() => secondsSince(props.row.since, props.nowMs) / props.
       <span class="text-muted-foreground font-mono text-xs whitespace-nowrap">
         {{ isZeroTime(row.since) ? '' : ageSince(row.since, nowMs) }}
       </span>
-      <AgeMeter
+      <Progress
         v-if="row.kind === 'pr_waiting' && !isZeroTime(row.since)"
-        :ratio="ratio"
-        :severity="row.severity"
+        :model-value="ageFill"
+        :segments="AGE_SEGMENTS"
+        :tone="crit ? 'danger' : 'warning'"
+        size="md"
+        :label="`${Math.round(Math.min(ratio, 1) * 100)}% of the critical age`"
+        class="w-20"
+        data-test="age-meter"
       />
     </div>
   </li>

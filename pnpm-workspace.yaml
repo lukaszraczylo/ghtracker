@@ -1,2 +1,4 @@
 allowBuilds:
   vue-demi: false
+minimumReleaseAgeExclude:
+  - '@perfect-design/ui@0.3.3'
