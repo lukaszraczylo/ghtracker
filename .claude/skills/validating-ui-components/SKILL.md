@@ -5,7 +5,7 @@ description: Use when a change touches src/components, src/App.vue, src/main.ts,
 
 # UI component validation
 
-A UI change is complete only when all six gates pass. The pull request CI (`.github/workflows/ci.yaml`, job `ui`) runs gates 1 to 3 only. It does not run the build with the PD source guard, the Prettier check or the browser check, so you must run them.
+A UI change is complete only when all six gates pass. The pull request CI (`.github/workflows/ci.yaml`, job `ui`) runs gates 1 to 4. It does not run the Prettier check or the browser check, so you must run them. Run all six gates before you push.
 
 ## Gates
 

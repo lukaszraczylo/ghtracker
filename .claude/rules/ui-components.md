@@ -34,7 +34,7 @@ The ghtracker page uses Perfect Design (PD), the `@perfect-design/ui` package. P
 
 - `src/style.css` lists each PD module that the bundle uses as an `@source` line. Tailwind scans only those modules.
 - When you use a PD component for the first time, add its `@source` line. `pnpm build` fails with `Add @source lines in src/style.css for PD modules:` and the missing paths if you forget. The `pd-source-guard` plugin in `vite.config.ts` does this check.
-- The pull request CI runs lint, typecheck and test only. It does not run `pnpm build`, so run the build yourself.
+- The pull request CI runs `pnpm build`. Run it yourself before you push, so that a missing line does not cost a CI run.
 - When you stop using a PD component, remove its `@source` line. Each extra line adds CSS.
 
 ## Respect the PD contract

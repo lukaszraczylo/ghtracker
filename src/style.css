@@ -1,5 +1,7 @@
 @import 'tailwindcss';
 @import '@perfect-design/ui/theme.css';
+/* The Claude docs quote class names that the page does not use. */
+@source not '../.claude';
 /* Only the PD modules the app bundles; vite.config.ts fails the build when one is missing. */
 @source '../node_modules/@perfect-design/ui/dist/lib';
 @source '../node_modules/@perfect-design/ui/dist/stores';

@@ -28,3 +28,5 @@ jobs:
       - run: npx --yes pnpm@11.21.0 lint
       - run: npx --yes pnpm@11.21.0 typecheck
       - run: npx --yes pnpm@11.21.0 test
+      # Runs the PD source guard in vite.config.ts, which catches a missing @source line in src/style.css.
+      - run: npx --yes pnpm@11.21.0 build
