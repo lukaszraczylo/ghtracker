@@ -13,7 +13,7 @@ export default tseslint.config(
     languageOptions: { parserOptions: { parser: tseslint.parser } },
   },
   {
-    files: ['**/*.{ts,vue,js}'],
+    files: ['**/*.{ts,vue,js,mjs}'],
     languageOptions: { globals: { ...globals.browser, ...globals.node } },
     rules: {
       'vue/multi-word-component-names': 'off',
