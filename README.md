@@ -116,7 +116,7 @@ actions:
 - `authors` limits auto sends to alerts that carry an author, which today means `pr_open`. Without `authors`, any alert of a listed kind fires.
 - The webhook request is the same as for a button press, plus `alert.ref` when the alert has one.
 - The server keeps the sent set in memory and drops an entry when its alert disappears, so a restart sends again for every open pull request. A failed send is not recorded and retries on the next scan. That covers a network error, a non-2xx answer and a `409` (the consumer is busy). Any other 2xx answer counts as sent.
-- A scan makes at most 5 auto sends, in order, so a first start cannot flood the webhook. The rest follow on later scans.
+- Each auto send pass makes at most `auto_max_per_scan` sends (top-level key, default `5`, minimum `1`), in order, so a first start cannot flood the webhook. The rest follow on later passes. Raise it to drain a backlog faster.
 - `action_requests_total` counts auto sends with the results `auto_ok`, `auto_rejected` (4xx), `auto_error` (network error or 5xx) and `auto_busy` (409).
 
 ## Metrics

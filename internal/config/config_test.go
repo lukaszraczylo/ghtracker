@@ -28,6 +28,9 @@ func TestFinalizeDefaults(t *testing.T) {
 	if c.ManualRefresh == nil || !*c.ManualRefresh {
 		t.Fatal("manual refresh must default to on")
 	}
+	if c.AutoMaxPerScan == nil || *c.AutoMaxPerScan != 5 {
+		t.Fatalf("auto_max_per_scan must default to 5, got %v", c.AutoMaxPerScan)
+	}
 	if c.GitHub.APIURL != DefaultAPIURL || c.GitHub.PrivateKeyPEM != "PEM" {
 		t.Fatalf("github defaults wrong: %+v", c.GitHub)
 	}
@@ -125,6 +128,49 @@ func TestManualRefreshCanBeDisabled(t *testing.T) {
 	}
 	if *c.ManualRefresh {
 		t.Fatal("explicit false must stay off")
+	}
+}
+
+func TestAutoMaxPerScan(t *testing.T) {
+	tests := map[string]struct {
+		set     *int
+		want    int
+		wantErr bool
+	}{
+		"unset":    {want: 5},
+		"explicit": {set: new(25), want: 25},
+		"one":      {set: new(1), want: 1},
+		"zero":     {set: new(0), wantErr: true},
+		"negative": {set: new(-3), wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			c := valid()
+			c.AutoMaxPerScan = tc.set
+			err := c.finalize(env(nil), keyFile)
+			if tc.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "auto_max_per_scan") {
+					t.Fatalf("err = %v, want auto_max_per_scan error", err)
+				}
+				return
+			}
+			if err != nil || *c.AutoMaxPerScan != tc.want {
+				t.Fatalf("got %v err %v, want %d", c.AutoMaxPerScan, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestLoadReadsAutoMaxPerScan(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "c.yaml")
+	body := "auto_max_per_scan: 9\ngithub:\n  app_id: 5\n  private_key_file: " + p + "\nrepos: [a/b]\n"
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(p)
+	if err != nil || *c.AutoMaxPerScan != 9 {
+		t.Fatalf("c=%+v err=%v", c, err)
 	}
 }
 

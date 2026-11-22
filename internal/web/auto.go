@@ -10,23 +10,22 @@ import (
 	"github.com/lukaszraczylo/ghtracker/internal/model"
 )
 
-// maxAutoSends caps webhook calls per refresh so a first start cannot flood the consumer.
-const maxAutoSends = 5
-
 type autoKey struct{ action, repo, url, ref string }
 
 // AutoRunner fires auto actions once per (action, repo, url, head commit).
 type AutoRunner struct {
 	actions *Actions
 	sent    map[autoKey]struct{}
+	limit   int
 	mu      sync.Mutex
 }
 
 // NewAutoRunner returns a runner for the auto actions in a, or nil when none is configured.
-func NewAutoRunner(a *Actions) *AutoRunner {
+// limit caps webhook calls per pass so a first start cannot flood the consumer.
+func NewAutoRunner(a *Actions, limit int) *AutoRunner {
 	for _, rt := range a.list {
 		if rt.cfg.Auto {
-			return &AutoRunner{actions: a, sent: map[autoKey]struct{}{}}
+			return &AutoRunner{actions: a, sent: map[autoKey]struct{}{}, limit: limit}
 		}
 	}
 	return nil
@@ -37,7 +36,7 @@ func (r *AutoRunner) Run(ctx context.Context, v collector.View) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	live := map[autoKey]struct{}{}
-	budget := maxAutoSends
+	budget := r.limit
 	for _, rt := range r.actions.list {
 		if !rt.cfg.Auto {
 			continue

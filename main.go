@@ -83,7 +83,7 @@ func run(ctx context.Context, cfgPath string, log *slog.Logger) error {
 	if len(cfg.Actions) > 0 {
 		actions := web.NewActions(cfg.Actions, log, reg)
 		srv.WithActions(actions)
-		if auto := web.NewAutoRunner(actions); auto != nil {
+		if auto := web.NewAutoRunner(actions, *cfg.AutoMaxPerScan); auto != nil {
 			coll.OnRefresh(auto.Run)
 		}
 	}

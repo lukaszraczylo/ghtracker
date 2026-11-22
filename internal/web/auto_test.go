@@ -76,7 +76,7 @@ func TestAutoRunner(t *testing.T) {
 			{[]model.PullRequest{autoPR(1, "a", "x", nil)}, 200, 0},
 		}},
 		"cap per refresh": {steps: []autoStep{
-			{manyPRs(8), 200, maxAutoSends},
+			{manyPRs(8), 200, config.DefaultAutoMaxPerScan},
 			{manyPRs(8), 200, 3},
 			{manyPRs(8), 200, 0},
 		}},
@@ -87,13 +87,40 @@ func TestAutoRunner(t *testing.T) {
 			a := NewActions([]config.Action{{ID: "review", Kinds: []string{collector.KindPROpen}, Auto: true, Authors: tc.authors,
 				Token: testToken, Webhook: config.Webhook{URL: hook.srv.URL + "/hook", Timeout: 2 * time.Second}}},
 				slog.New(slog.NewTextHandler(io.Discard, nil)), prometheus.NewRegistry())
-			runner := NewAutoRunner(a)
+			runner := NewAutoRunner(a, config.DefaultAutoMaxPerScan)
 			for i, st := range tc.steps {
 				hook.postCode = st.code
 				before := hook.postCalls.Load()
 				runner.Run(t.Context(), autoView(st.prs...))
 				if got := hook.postCalls.Load() - before; got != st.wantPosts {
 					t.Fatalf("step %d: posts = %d, want %d", i, got, st.wantPosts)
+				}
+			}
+		})
+	}
+}
+
+func TestAutoRunnerConfiguredLimit(t *testing.T) {
+	tests := map[string]struct {
+		steps []int32
+		limit int
+	}{
+		"raised cap drains a backlog faster": {limit: 12, steps: []int32{12, 8}},
+		"lowered cap":                        {limit: 2, steps: []int32{2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0}},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			hook := newFakeHook(t)
+			a := NewActions([]config.Action{{ID: "review", Kinds: []string{collector.KindPROpen}, Auto: true,
+				Token: testToken, Webhook: config.Webhook{URL: hook.srv.URL + "/hook", Timeout: 2 * time.Second}}},
+				slog.New(slog.NewTextHandler(io.Discard, nil)), prometheus.NewRegistry())
+			runner := NewAutoRunner(a, tc.limit)
+			for i, want := range tc.steps {
+				hook.postCode = 200
+				before := hook.postCalls.Load()
+				runner.Run(t.Context(), autoView(manyPRs(20)...))
+				if got := hook.postCalls.Load() - before; got != want {
+					t.Fatalf("pass %d: posts = %d, want %d", i, got, want)
 				}
 			}
 		})
@@ -113,7 +140,7 @@ func TestAutoRunnerPayloadAuthAndMetrics(t *testing.T) {
 	a := NewActions([]config.Action{{ID: "review", Kinds: []string{collector.KindPROpen}, Auto: true,
 		Token: testToken, Webhook: config.Webhook{URL: hook.srv.URL + "/hook", Timeout: 2 * time.Second}}},
 		slog.New(slog.NewTextHandler(io.Discard, nil)), prometheus.NewRegistry())
-	NewAutoRunner(a).Run(t.Context(), autoView(autoPR(1, "abc", "x", nil)))
+	NewAutoRunner(a, config.DefaultAutoMaxPerScan).Run(t.Context(), autoView(autoPR(1, "abc", "x", nil)))
 	hook.mu.Lock()
 	defer hook.mu.Unlock()
 	if hook.lastAuth != "Bearer "+testToken {
@@ -131,7 +158,7 @@ func TestAutoRunnerPayloadAuthAndMetrics(t *testing.T) {
 
 func TestNewAutoRunnerNilWithoutAutoActions(t *testing.T) {
 	a := NewActions([]config.Action{{ID: "x", Webhook: config.Webhook{URL: "http://h.test"}}}, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
-	if NewAutoRunner(a) != nil {
+	if NewAutoRunner(a, config.DefaultAutoMaxPerScan) != nil {
 		t.Fatal("runner must be nil when no action is auto")
 	}
 }

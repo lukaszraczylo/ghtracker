@@ -26,6 +26,7 @@ const (
 	DefaultWorkflowDormant = 30 * 24 * time.Hour
 	DefaultMaxItems        = 100
 	DefaultConcurrency     = 2
+	DefaultAutoMaxPerScan  = 5
 	MinRefresh             = time.Minute
 	dataStaleGrace         = 30 * time.Minute
 	defaultDataStaleFactor = 2
@@ -85,7 +86,9 @@ func (a Action) AppliesTo(kind string) bool {
 
 type Config struct {
 	// ManualRefresh enables POST /refresh and the rescan button; it defaults to on.
-	ManualRefresh   *bool         `yaml:"manual_refresh"`
+	ManualRefresh *bool `yaml:"manual_refresh"`
+	// AutoMaxPerScan caps auto action sends per pass; nil selects the default and a value below 1 is rejected.
+	AutoMaxPerScan  *int          `yaml:"auto_max_per_scan"`
 	Listen          string        `yaml:"listen"`
 	Repos           []string      `yaml:"repos"`
 	Actions         []Action      `yaml:"actions"`
@@ -134,6 +137,13 @@ func (c *Config) finalize(getenv func(string) string, readFile func(string) ([]b
 	if c.ManualRefresh == nil {
 		on := true
 		c.ManualRefresh = &on
+	}
+	if c.AutoMaxPerScan == nil {
+		n := DefaultAutoMaxPerScan
+		c.AutoMaxPerScan = &n
+	}
+	if *c.AutoMaxPerScan < 1 {
+		return fmt.Errorf("auto_max_per_scan must be at least 1, got %d", *c.AutoMaxPerScan)
 	}
 	if c.Listen == "" {
 		c.Listen = DefaultListen
